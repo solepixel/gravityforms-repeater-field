@@ -1,0 +1,215 @@
+/**
+ * Frontend Styles for Gravity Forms Repeater Field
+ *
+ * @package GravityFormsRepeaterField
+ * @since 1.0.0
+ */
+
+/* Repeater Controls */
+.gf-repeater-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	margin-bottom: 12px;
+	padding-bottom: 8px;
+	border-bottom: 1px solid rgba(0,0,0,0.5);
+}
+
+.gf-repeater-controls {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.gf-repeater-controls button {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 32px;
+	height: 32px;
+	padding: 0;
+	border: 1px solid #dee2e6;
+	background: #fff;
+	color: #495057;
+	font-size: 16px;
+	font-weight: bold;
+	text-decoration: none;
+	border-radius: 4px;
+	cursor: pointer;
+	transition: all 0.2s ease;
+}
+
+.gf-repeater-controls button:hover:not(:disabled) {
+	background: #007cba;
+	color: #fff;
+	border-color: #007cba;
+}
+
+.gf-repeater-controls button:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+
+.gf-repeater-controls .gf-repeater-add {
+	background: #28a745;
+	color: #fff;
+	border-color: #28a745;
+}
+
+.gf-repeater-controls .gf-repeater-add:hover {
+	background: #218838;
+	border-color: #1e7e34;
+}
+
+.gf-repeater-controls .gf-repeater-remove {
+	background: #dc3545;
+	color: #fff;
+	border-color: #dc3545;
+}
+
+.gf-repeater-controls .gf-repeater-remove:hover {
+	background: #c82333;
+	border-color: #bd2130;
+}
+
+/* Group Fieldsets */
+.gf-fieldset {
+	border: 1px solid #dee2e6;
+	border-radius: 4px;
+	padding: 20px;
+	margin-bottom: 20px;
+	background: #fff;
+}
+
+.gf-group-fieldset {
+	position: relative;
+}
+
+.gf-repeater-fieldset {
+	display: none;
+}
+
+.gf-repeater-fieldset.active {
+	display: block;
+}
+
+.gf-repeater-fieldset.sliding {
+	transition: transform 0.3s ease-in-out;
+}
+
+.gform_wrapper .gf-repeater-header .gf-group-title {
+    margin: 0;
+	padding: 0;
+	font-size: 18px;
+	font-weight: 600;
+	color: #333;
+}
+
+/* Repeater Instance Counter */
+.gf-repeater-instance-counter {
+	display: inline-block;
+	margin-left: 8px;
+	padding: 2px 8px;
+	background: #007cba;
+	color: #fff;
+	font-size: 12px;
+	font-weight: 500;
+	border-radius: 12px;
+}
+
+/* Repeater Navigation */
+.gf-repeater-navigation {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	margin-top: 16px;
+	padding-top: 16px;
+	border-top: 1px solid #dee2e6;
+}
+
+.gf-repeater-nav-info {
+	font-size: 14px;
+	color: #6c757d;
+}
+
+/* Slider Animation */
+.gf-repeater-slider {
+	position: relative;
+	overflow: hidden;
+}
+
+.gf-repeater-slider .gf-repeater-fieldset {
+	position: absolute;
+	top: 0;
+	left: 0;
+	width: 100%;
+	transform: translateX(100%);
+	transition: transform 0.3s ease-in-out;
+}
+
+.gf-repeater-slider .gf-repeater-fieldset.active {
+	position: relative;
+	transform: translateX(0);
+}
+
+.gf-repeater-slider .gf-repeater-fieldset.prev {
+	transform: translateX(-100%);
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+	.gf-repeater-controls {
+		flex-wrap: wrap;
+		gap: 4px;
+	}
+
+	.gf-repeater-controls button {
+		width: 28px;
+		height: 28px;
+		font-size: 14px;
+	}
+
+	.gf-fieldset {
+		padding: 16px;
+	}
+
+	.gf-section-title {
+		font-size: 16px;
+	}
+}
+
+/* Accessibility */
+.gf-repeater-controls button:focus {
+	outline: 2px solid #007cba;
+	outline-offset: 2px;
+}
+
+.gf-repeater-controls button:focus:not(:focus-visible) {
+	outline: none;
+}
+
+/* Loading State */
+.gf-repeater-loading {
+	opacity: 0.6;
+	pointer-events: none;
+}
+
+.gf-repeater-loading::after {
+	content: '';
+	position: absolute;
+	top: 50%;
+	left: 50%;
+	width: 20px;
+	height: 20px;
+	margin: -10px 0 0 -10px;
+	border: 2px solid #f3f3f3;
+	border-top: 2px solid #007cba;
+	border-radius: 50%;
+	animation: gf-repeater-spin 1s linear infinite;
+}
+
+@keyframes gf-repeater-spin {
+	0% { transform: rotate(0deg); }
+	100% { transform: rotate(360deg); }
+}

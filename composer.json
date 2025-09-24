@@ -1,0 +1,26 @@
+{
+    "name": "briantics/gravityforms-repeater-field",
+    "description": "A robust repeater field add-on for Gravity Forms that allows grouping and repeating form sections.",
+    "type": "wordpress-plugin",
+    "license": "GPL-2.0-or-later",
+    "authors": [
+        {
+            "name": "Briantics, Inc.",
+            "homepage": "https://b7s.co"
+        }
+    ],
+    "require": {
+        "php": ">=7.4"
+    },
+    "autoload": {
+        "psr-4": {
+            "GravityFormsRepeaterField\\": "src/"
+        },
+        "files": [
+            "src/helpers.php"
+        ]
+    },
+    "config": {
+        "sort-packages": true
+    }
+}
