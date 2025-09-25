@@ -29,13 +29,11 @@ define( 'GF_REPEATER_FIELD_PLUGIN_FILE', __FILE__ );
 define( 'GF_REPEATER_FIELD_PLUGIN_DIR', plugin_dir_path( GF_REPEATER_FIELD_PLUGIN_FILE ) );
 define( 'GF_REPEATER_FIELD_PLUGIN_URL', plugin_dir_url( GF_REPEATER_FIELD_PLUGIN_FILE ) );
 
-// Load plugin classes.
-require_once GF_REPEATER_FIELD_PLUGIN_DIR . 'src/helpers.php';
-require_once GF_REPEATER_FIELD_PLUGIN_DIR . 'src/Classes/Core.php';
-require_once GF_REPEATER_FIELD_PLUGIN_DIR . 'src/Classes/RepeaterStartField.php';
-require_once GF_REPEATER_FIELD_PLUGIN_DIR . 'src/Classes/RepeaterEndField.php';
-require_once GF_REPEATER_FIELD_PLUGIN_DIR . 'src/Classes/Assets.php';
-require_once GF_REPEATER_FIELD_PLUGIN_DIR . 'src/Classes/AdminDisplay.php';
+// Composer autoload (PSR-4) — prefer autoloader over manual requires.
+$autoload = GF_REPEATER_FIELD_PLUGIN_DIR . 'vendor/autoload.php';
+if ( file_exists( $autoload ) ) {
+    require_once $autoload;
+}
 
 /**
  * Initialize the plugin.
@@ -48,8 +46,8 @@ function gf_repeater_field_init() {
 		return;
 	}
 
-	// Initialize the main plugin class.
-	new \GravityFormsRepeaterField\Core();
+    // Initialize the main plugin class.
+    new \GravityFormsRepeaterField\Core();
 }
 
 add_action( 'gform_loaded', 'gf_repeater_field_init', 5 );

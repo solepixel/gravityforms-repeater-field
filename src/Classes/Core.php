@@ -8,10 +8,7 @@
 
 namespace GravityFormsRepeaterField;
 
-use GravityFormsRepeaterField\Classes\RepeaterStartField;
-use GravityFormsRepeaterField\Classes\RepeaterEndField;
-use GravityFormsRepeaterField\Classes\Assets;
-use GravityFormsRepeaterField\Classes\AdminDisplay;
+// Classes are in the same namespace; no "Classes" segment required.
 
 /**
  * Core Class

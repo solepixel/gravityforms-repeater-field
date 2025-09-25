@@ -58,31 +58,37 @@
          */
         initializeRepeater(formId, fieldId, $controls) {
             const repeaterId = `gf-repeater-${formId}-${fieldId}`;
-            // Locate Start/End field rows in GF markup
             const $startGField = $(`#field_${formId}_${fieldId}`);
             if ($startGField.length === 0) return;
 
-            const $endGField = $startGField.nextAll('li.gfield.gfield--type-repeater_end').first();
+            const $endGField = $startGField.nextAll('div.gfield.gfield--type-repeater_end').first();
             if ($endGField.length === 0) return;
 
-            // Remove the End field's label "for" on frontend and hide its wrapper spacing later
+            // Remove for attributes on labels (no inputs associated)
             $endGField.find('label.gfield_label').removeAttr('for');
-
-            // Remove the Start label's "for" (no input is associated)
             $startGField.find('label.gfield_label').removeAttr('for');
 
-            // Create fieldset wrapper right after Start
-            let $fieldset = $(`#gf-fieldset-${fieldId}`);
-            if ($fieldset.length === 0) {
-                $fieldset = $('<fieldset/>', {
-                    id: `gf-fieldset-${fieldId}`,
-                    class: 'gf-fieldset gf-group-fieldset gf-repeater-fieldset active'
+            // Create outer wrapper after the Start field
+            let $outerWrapper = $(`#gf-repeater-wrapper-${fieldId}`);
+            if ($outerWrapper.length === 0) {
+                $outerWrapper = $('<div/>', {
+                    id: `gf-repeater-wrapper-${fieldId}`,
+                    class: 'gf-repeater-wrapper'
                 });
-                $fieldset.insertAfter($startGField);
+                $outerWrapper.insertAfter($startGField);
             }
 
-            // Move fields between Start and End into the first instance container
-            const $between = $startGField.nextUntil($endGField, 'li.gfield');
+            // Fieldset container inside wrapper
+            let $fieldset = $outerWrapper.find('fieldset.gf-repeater-fieldset').first();
+            if ($fieldset.length === 0) {
+                $fieldset = $('<fieldset/>', {
+                    class: 'gf-fieldset gf-group-fieldset gf-repeater-fieldset active'
+                });
+                $outerWrapper.append($fieldset);
+            }
+
+            // Move fields into first instance container
+            const $between = $startGField.nextUntil($endGField, 'div.gfield');
             let $firstInstance = $fieldset.find('.gf-repeater-instance').first();
             if ($firstInstance.length === 0) {
                 $firstInstance = $('<div class="gf-repeater-instance"/>');
@@ -92,7 +98,15 @@
             }
             $between.appendTo($firstInstance);
 
-            // Remove the End field from frontend DOM to prevent spacing
+            // Create slides container for visual transition
+            let $slides = $outerWrapper.find('.gf-repeater-slides');
+            if ($slides.length === 0) {
+                $slides = $('<div class="gf-repeater-slides"/>');
+                $fieldset.wrapInner($slides);
+                $slides = $outerWrapper.find('.gf-repeater-slides');
+            }
+
+            // Remove the End field from frontend DOM
             $endGField.remove();
 
             // Store repeater instance
@@ -102,7 +116,8 @@
                 currentIndex: 0,
                 totalInstances: 1,
                 $controls: $controls,
-                $fieldset: $fieldset,
+                $wrapper: $outerWrapper,
+                $slides: $slides,
                 instances: [$firstInstance]
             });
 
@@ -233,7 +248,7 @@
         createFieldsetInstance(instance) {
             const $original = instance.instances[0];
             const $newFieldset = $original.clone(true, true);
-            $newFieldset.addClass('gf-repeater-clone');
+            $newFieldset.addClass('gf-repeater-instance');
 
             // Update IDs and names for the new instance
             this.updateFieldsetIds($newFieldset, instance.totalInstances);
@@ -288,19 +303,15 @@
             if (!instance) return;
 
             // Ensure DOM contains all instances in correct order
-            const $container = instance.$fieldset;
-            if ($container && $container.length) {
-                // Remove any previously appended clones to avoid duplicates
-                $container.find('.gf-repeater-instance').remove();
-                // Append all instances in order
+            const $slides = instance.$slides;
+            if ($slides && $slides.length) {
+                $slides.empty();
                 instance.instances.forEach(($inst, index) => {
-                    $container.append($inst);
-                    if (index === instance.currentIndex) {
-                        $inst.show().addClass('active');
-                    } else {
-                        $inst.hide().removeClass('active');
-                    }
+                    $slides.append($inst);
                 });
+                // Slide to current index
+                const offset = -(instance.currentIndex * 100);
+                $slides.css({ transform: `translateX(${offset}%)` });
             }
         }
 
@@ -377,16 +388,7 @@
                     instancesData.push(instanceData);
                 });
 
-                // Store serialized data on hidden input for submission, if desired
-                let $hidden = $(`#input_${formId}_${fieldId}`);
-                if ($hidden.length === 0) {
-                    $hidden = $('<input/>', {
-                        type: 'hidden',
-                        id: `input_${formId}_${fieldId}`,
-                        name: `input_${fieldId}`
-                    });
-                    $fieldset.append($hidden);
-                }
+                const $hidden = instance.$wrapper.find(`#input_${formId}_${fieldId}`);
                 $hidden.val(JSON.stringify(instancesData));
             });
         }

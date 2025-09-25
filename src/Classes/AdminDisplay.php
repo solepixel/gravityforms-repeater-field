@@ -6,7 +6,7 @@
  * @since 1.0.0
  */
 
-namespace GravityFormsRepeaterField\Classes;
+namespace GravityFormsRepeaterField;
 
 /**
  * Admin Display Class

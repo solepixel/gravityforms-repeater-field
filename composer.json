@@ -14,7 +14,7 @@
     },
     "autoload": {
         "psr-4": {
-            "GravityFormsRepeaterField\\": "src/"
+            "GravityFormsRepeaterField\\": "src/Classes/"
         },
         "files": [
             "src/helpers.php"

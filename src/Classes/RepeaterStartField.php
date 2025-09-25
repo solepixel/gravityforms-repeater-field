@@ -6,7 +6,7 @@
  * @since 1.0.0
  */
 
-namespace GravityFormsRepeaterField\Classes;
+namespace GravityFormsRepeaterField;
 
 use GF_Field;
 
@@ -110,21 +110,18 @@ class RepeaterStartField extends GF_Field {
         $title = sprintf( '<h3 class="gf-group-title">%s</h3>', esc_html( $label ) );
 
         // Header with label and controls inline.
-        $header = sprintf(
-            '<div class="gf-repeater-header">%s%s</div>',
-            $title,
-            $controls
-        );
+		$header = sprintf(
+			'<div class="gf-repeater-header">%s%s</div>',
+			$title,
+			$controls
+		);
 
-        // Note: We emit a marker that frontend JS will replace/move to wrap
-        // the fields between Start and End. This ensures the fieldset sits
-        // outside the .gfield container and wraps following fields.
-        $fieldset_open = sprintf(
-            '<div class="gf-repeater-fieldset-anchor" data-form-id="%d" data-field-id="%d"></div>',
-            $form_id,
-            $field_id
-        );
+		$hidden_input = sprintf(
+			'<input type="hidden" class="gf-repeater-data-input" name="input_%1$d" id="input_%2$d_%1$d" />',
+			$this->id,
+			$form_id
+		);
 
-        return $header . $fieldset_open;
+		return $header . $hidden_input;
     }
 }
