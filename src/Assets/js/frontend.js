@@ -49,6 +49,8 @@
 
                 if (formId && fieldId) {
                     this.initializeRepeater(formId, fieldId, $controls);
+                    // Attach GF listeners once per form
+                    this.attachGFListeners(formId);
                 }
             });
         }
@@ -64,9 +66,9 @@
             const $endGField = $startGField.nextAll('div.gfield.gfield--type-repeater_end').first();
             if ($endGField.length === 0) return;
 
-            // Remove for attributes on labels (no inputs associated)
+            // Remove for attributes on labels (no inputs associated) and hide the start field label in frontend
             $endGField.find('label.gfield_label').removeAttr('for');
-            $startGField.find('label.gfield_label').removeAttr('for');
+            $startGField.find('label.gfield_label').removeAttr('for').remove();
 
             // Determine container (Gravity Forms uses .gform_fields)
             const $container = $startGField.parent();
@@ -85,11 +87,13 @@
             // Wrap the exact range (do this BEFORE inserting our fieldset so relative order remains correct)
             $range.wrapAll('<div class="gf-repeater-instance"/>');
 
-            // Find the newly created instance (now adjacent to Start)
+            // Apply GF container classes to the instance so inner fields keep layout widths
             let $firstInstance = $startGField.next('.gf-repeater-instance');
-            if ($firstInstance.length === 0) {
-                // Fallback (should not happen): create empty instance to avoid null refs
-                $firstInstance = $('<div class="gf-repeater-instance"/>');
+            if ($firstInstance.length) {
+                $firstInstance.addClass('gform_fields top_label form_sublabel_below description_below validation_below');
+            } else {
+                // Fallback (should not happen): create an empty instance to avoid null refs
+                $firstInstance = $('<div class="gf-repeater-instance gform_fields top_label form_sublabel_below description_below validation_below"/>');
             }
 
             // Create a fieldset immediately after the Start field and move the wrapped instance inside
@@ -97,17 +101,21 @@
             if ($fieldset.length === 0) {
                 $fieldset = $('<fieldset/>', {
                     id: `gf-fieldset-${fieldId}`,
-                    class: 'gf-fieldset gf-group-fieldset gf-repeater-fieldset active'
+                    class: 'gfield gfield--type-repeater_fieldsets gfield--input-type-repeater_fieldsets gfield--width-full field_sublabel_below gfield--no-description field_description_below field_validation_below gfield_visibility_visible gf-fieldset gf-group-fieldset gf-repeater-fieldset active'
                 }).attr('data-field-id', fieldId);
                 $fieldset.insertAfter($startGField);
-                // Add viewport + track
                 $fieldset.append('<div class="gf-repeater-viewport"><div class="gf-repeater-track"/></div>');
-            }
-            // Ensure track exists
-            if ($fieldset.find('.gf-repeater-track').length === 0) {
-                $fieldset.append('<div class="gf-repeater-viewport"><div class="gf-repeater-track"/></div>');
+            } else {
+                // Ensure fieldset has the classes even if created previously
+                $fieldset.addClass('gfield gfield--type-repeater_fieldsets gfield--input-type-repeater_fieldsets gfield--width-full field_sublabel_below gfield--no-description field_description_below field_validation_below gfield_visibility_visible gf-fieldset gf-group-fieldset gf-repeater-fieldset active');
             }
             $fieldset.find('.gf-repeater-track').append($firstInstance);
+
+            // GF conditional logic will be applied via adapter
+
+            // Mark and apply GF logic for first instance
+            this.setInstanceMeta($firstInstance, formId);
+            this.applyGFConditionalToInstance($firstInstance, formId);
 
             // Remove the End field from frontend DOM
             $endGField.remove();
@@ -200,10 +208,19 @@
             instance.instances.push($newFieldset);
             instance.totalInstances++;
 
-            // Append into DOM
+            // Append into DOM (append to track inside fieldset)
             if (instance.$fieldset && instance.$fieldset.length) {
-                instance.$fieldset.append($newFieldset);
+                const $track = instance.$fieldset.find('.gf-repeater-track');
+                if ($track.length) {
+                    $track.append($newFieldset);
+                } else {
+                    instance.$fieldset.append($newFieldset);
+                }
             }
+
+            // Apply GF conditional logic for the new instance
+            this.setInstanceMeta($newFieldset, instance.formId);
+            this.applyGFConditionalToInstance($newFieldset, instance.formId);
 
             // Move to the new instance immediately
             instance.currentIndex = instance.totalInstances - 1;
@@ -221,6 +238,8 @@
             if (!instance || instance.totalInstances <= 1) return;
 
             // Remove current instance
+            const $current = instance.instances[instance.currentIndex];
+            if ($current && $current.remove) { $current.remove(); }
             instance.instances.splice(instance.currentIndex, 1);
             instance.totalInstances--;
 
@@ -256,13 +275,23 @@
         createFieldsetInstance(instance) {
             const $original = instance.instances[0];
             const $newFieldset = $original.clone(true, true);
-            $newFieldset.addClass('gf-repeater-instance');
+            $newFieldset.addClass('gf-repeater-instance gform_fields top_label form_sublabel_below description_below validation_below');
 
             // Update IDs and names for the new instance
             this.updateFieldsetIds($newFieldset, instance.totalInstances);
 
-            // Clear field values
-            $newFieldset.find('input, textarea, select').val('');
+            // Clear field values (but keep radios/checkboxes unchecked by default without breaking logic)
+            $newFieldset.find('input, textarea, select').each(function(){
+                const $field = $(this);
+                const type = ($field.attr('type') || '').toLowerCase();
+                if (type === 'radio' || type === 'checkbox') {
+                    $field.prop('checked', false);
+                } else if ($field.is('select')) {
+                    $field.prop('selectedIndex', 0).trigger('change');
+                } else if ($field.is('textarea') || type === 'text' || type === 'number') {
+                    $field.val('');
+                }
+            });
 
             return $newFieldset;
         }
@@ -291,7 +320,7 @@
                     const baseName = originalName.endsWith('[]') ? originalName.slice(0, -2) : originalName;
                     const type = ($field.attr('type') || '').toLowerCase();
                     // Keep controller radios unindexed for GF conditional logic to continue working
-                    if (type === 'radio') {
+                    if (type === 'radio' || type === 'checkbox') {
                         $field.attr('name', baseName);
                     } else {
                         $field.attr('name', `${baseName}[]`);
@@ -316,24 +345,31 @@
             const instance = this.instances.get(repeaterId);
             if (!instance) return;
 
-            // Ensure all instances are present inside the track
-            let $track = instance.$fieldset.children('.gf-repeater-track');
-            if ($track.length === 0) {
-                instance.$fieldset.append('<div class="gf-repeater-track"/>');
-                $track = instance.$fieldset.children('.gf-repeater-track');
+            // Ensure viewport/track exists
+            let $viewport = instance.$fieldset.find('.gf-repeater-viewport');
+            if ($viewport.length === 0) {
+                instance.$fieldset.append('<div class="gf-repeater-viewport"><div class="gf-repeater-track"/></div>');
+                $viewport = instance.$fieldset.find('.gf-repeater-viewport');
             }
+            let $track = $viewport.find('.gf-repeater-track');
+            $track.empty();
+
+            // Populate track with instances
             instance.instances.forEach(($inst) => {
-                if (!$.contains($track[0], $inst[0])) {
-                    $track.append($inst);
-                }
+                $inst.css({ minWidth: '100%' });
+                $track.append($inst);
             });
 
-            // Slide transition using the track
+            // Slide to current
             const offset = -(instance.currentIndex * 100);
             $track.css({ transform: `translateX(${offset}%)` });
             instance.instances.forEach(($inst) => {
                 $inst.css({ minWidth: '100%' });
             });
+
+            // Apply conditional logic inside the active instance
+            const $active = instance.instances[instance.currentIndex];
+            this.applyGFConditionalToInstance($active, instance.formId);
 
             // Re-run GF conditional logic to re-evaluate visibility
             if (window.gform && typeof window.gform.doConditionalLogic === 'function') {
@@ -353,6 +389,7 @@
             const $removeBtn = $controls.find('.gf-repeater-remove');
             const $prevBtn = $controls.find('.gf-repeater-prev');
             const $nextBtn = $controls.find('.gf-repeater-next');
+            const $count = $controls.find('.gf-repeater-count');
 
             // Update remove button visibility
             if (instance.totalInstances > 1) {
@@ -364,6 +401,12 @@
             // Update navigation buttons
             $prevBtn.prop('disabled', instance.currentIndex === 0);
             $nextBtn.prop('disabled', instance.currentIndex >= instance.totalInstances - 1);
+
+            // Update count text (1-based index)
+            if ($count.length) {
+                const current = instance.currentIndex + 1;
+                $count.text(`${current}/${instance.totalInstances}`);
+            }
         }
 
         /**
@@ -414,8 +457,104 @@
                     instancesData.push(instanceData);
                 });
 
-                const $hidden = instance.$wrapper.find(`#input_${formId}_${fieldId}`);
-                $hidden.val(JSON.stringify(instancesData));
+                const $hidden = $(`#input_${formId}_${fieldId}`);
+                if ($hidden && $hidden.length) {
+                    $hidden.val(JSON.stringify(instancesData));
+                }
+            });
+        }
+
+        // Removed custom per-field conditional logic; using GF map exclusively
+
+        // Mark all gfield containers in an instance with data-gf-id for safe scoping
+        setInstanceMeta($instance, formId) {
+            if (!$instance || !$instance.length) return;
+            $instance.attr('data-gf-form', formId);
+            $instance.find('.gfield').each(function(){
+                const $f = $(this);
+                const idAttr = $f.attr('id') || '';
+                const m = idAttr.match(/field_(\d+)_(\d+)/);
+                if (m && m[2]) {
+                    $f.attr('data-gf-id', m[2]);
+                }
+            });
+        }
+
+        // Evaluate GF conditional logic map for a single instance
+        applyGFConditionalToInstance($instance, formId) {
+            if (!$instance || !$instance.length) return;
+            const map = window.gf_form_conditional_logic && window.gf_form_conditional_logic[formId];
+            if (!map || !map.logic) return;
+
+            const evalRule = (rule) => {
+                // Locate inputs for rule.fieldId inside instance by name pattern input_{id}
+                const name = `input_${rule.fieldId}`;
+                const $inputs = $instance.find(`[name='${name}'], [name='${name}[]']`);
+                if ($inputs.length === 0) return false;
+                // Support radio/checkbox and text/select basic operators
+                let val = '';
+                const type = ($inputs.attr('type') || '').toLowerCase();
+                if (type === 'radio' || type === 'checkbox') {
+                    val = $inputs.filter(':checked').val() || '';
+                } else if ($inputs.is('select')) {
+                    val = $inputs.val() || '';
+                } else {
+                    val = $inputs.val() || '';
+                }
+                const rVal = (rule.value || '').toString();
+                switch ((rule.operator || 'is')) {
+                    case 'is':
+                        return (val || '').toString() === rVal;
+                    case 'isnot':
+                        return (val || '').toString() !== rVal;
+                    default:
+                        // fallback to equality
+                        return (val || '').toString() === rVal;
+                }
+            };
+
+            Object.keys(map.logic).forEach((depId) => {
+                const logic = map.logic[depId];
+                const fieldLogic = logic && logic.field;
+                if (!fieldLogic || !fieldLogic.enabled) return;
+
+                const rules = fieldLogic.rules || [];
+                let matched = false;
+                if (fieldLogic.logicType === 'all') {
+                    matched = rules.every(evalRule);
+                } else {
+                    matched = rules.some(evalRule);
+                }
+
+                const $dep = $instance.find(`[data-gf-id='${depId}']`);
+                if ($dep.length) {
+                    const actionType = fieldLogic.actionType || 'show';
+                    const shouldShow = (actionType === 'show') ? matched : !matched;
+                    const $inputs = $dep.find(':input');
+                    if (shouldShow) {
+                        $dep.css('display', '');
+                        $dep.attr('data-conditional-logic', 'visible');
+                        $inputs.prop('disabled', false);
+                    } else {
+                        $dep.css('display', 'none');
+                        $dep.attr('data-conditional-logic', 'hidden');
+                        $inputs.prop('disabled', true);
+                    }
+                }
+            });
+        }
+
+        // Listen to GF conditional logic runs and mirror results into all instances
+        attachGFListeners(formId) {
+            const self = this;
+            $(document).off('gform_post_conditional_logic.gfRepeater').on('gform_post_conditional_logic.gfRepeater', function(e, fid){
+                if (fid !== formId) return;
+                // Re-apply to all instances for this form
+                self.instances.forEach((inst, key) => {
+                    if (inst.formId === formId) {
+                        inst.instances.forEach(($inst) => self.applyGFConditionalToInstance($inst, formId));
+                    }
+                });
             });
         }
     }

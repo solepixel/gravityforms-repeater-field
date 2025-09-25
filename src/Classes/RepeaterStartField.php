@@ -94,22 +94,22 @@ class RepeaterStartField extends GF_Field {
 
         $controls = sprintf(
             '<div class="gf-repeater-controls" data-form-id="%d" data-field-id="%d">
-                <button type="button" class="gf-repeater-add" title="%s">+</button>
                 <button type="button" class="gf-repeater-remove" title="%s" style="display:none;">-</button>
                 <button type="button" class="gf-repeater-prev" title="%s" disabled>←</button>
+                <span class="gf-repeater-count" aria-live="polite">1/1</span>
                 <button type="button" class="gf-repeater-next" title="%s" disabled>→</button>
+                <button type="button" class="gf-repeater-add" title="%s">+</button>
             </div>',
             $form_id,
             $field_id,
-            esc_attr__( 'Add Group', 'gravityforms-repeater-field' ),
             esc_attr__( 'Remove Group', 'gravityforms-repeater-field' ),
             esc_attr__( 'Previous Group', 'gravityforms-repeater-field' ),
-            esc_attr__( 'Next Group', 'gravityforms-repeater-field' )
+            esc_attr__( 'Next Group', 'gravityforms-repeater-field' ),
+            esc_attr__( 'Add Group', 'gravityforms-repeater-field' )
         );
 
-        $title = sprintf( '<h3 class="gf-group-title">%s</h3>', esc_html( $label ) );
+        $title = sprintf( '<h3 class="gf-group-title gsection_title">%s</h3>', esc_html( $label ) );
 
-        // Header with label and controls inline.
 		$header = sprintf(
 			'<div class="gf-repeater-header">%s%s</div>',
 			$title,

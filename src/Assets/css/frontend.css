@@ -137,6 +137,23 @@
 	border-radius: 12px;
 }
 
+/* Counter between arrows */
+.gf-repeater-controls .gf-repeater-count {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 42px;
+	height: 32px;
+	margin: 0;
+	padding: 0 6px;
+	border: 1px solid #dee2e6;
+	border-radius: 4px;
+	background: #fff;
+	color: #495057;
+	font-size: 14px;
+	line-height: 1;
+}
+
 /* Repeater Navigation */
 .gf-repeater-navigation {
 	display: flex;
