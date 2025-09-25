@@ -14,6 +14,7 @@
     class GFRepeaterField {
         constructor() {
             this.instances = new Map();
+            this.gfListenerAttached = false;
             this.init();
         }
 
@@ -49,8 +50,8 @@
 
                 if (formId && fieldId) {
                     this.initializeRepeater(formId, fieldId, $controls);
-                    // Attach GF listeners once per form
-                    this.attachGFListeners(formId);
+                    // Attach GF listeners once globally
+                    this.attachGFListeners();
                 }
             });
         }
@@ -116,6 +117,7 @@
             // Mark and apply GF logic for first instance
             this.setInstanceMeta($firstInstance, formId);
             this.applyGFConditionalToInstance($firstInstance, formId);
+            this.bindInstanceInputs($firstInstance, formId);
 
             // Remove the End field from frontend DOM
             $endGField.remove();
@@ -221,6 +223,7 @@
             // Apply GF conditional logic for the new instance
             this.setInstanceMeta($newFieldset, instance.formId);
             this.applyGFConditionalToInstance($newFieldset, instance.formId);
+            this.bindInstanceInputs($newFieldset, instance.formId);
 
             // Move to the new instance immediately
             instance.currentIndex = instance.totalInstances - 1;
@@ -319,21 +322,34 @@
                 if (originalName) {
                     const baseName = originalName.endsWith('[]') ? originalName.slice(0, -2) : originalName;
                     const type = ($field.attr('type') || '').toLowerCase();
-                    // Keep controller radios unindexed for GF conditional logic to continue working
+                    // Make radio/checkbox names unique per instance to prevent cross-instance coupling
                     if (type === 'radio' || type === 'checkbox') {
-                        $field.attr('name', baseName);
+                        $field.attr('name', `${baseName}__i${instanceIndex}`);
                     } else {
                         $field.attr('name', `${baseName}[]`);
                     }
                 }
             });
 
-            // Update label for attributes
-            $fieldset.find('label[for]').each(function() {
-                const $label = $(this);
-                const originalFor = $label.attr('for');
-                if (originalFor) {
-                    $label.attr('for', `${originalFor}_${instanceIndex}`);
+            // Update label `for` attributes to match actual input ids
+            // For choice inputs: map each label to its sibling input id
+            $fieldset.find('.gfield_radio .gchoice, .gfield_checkbox .gchoice').each(function(){
+                const $gc = $(this);
+                const $inp = $gc.find('input').first();
+                const $lbl = $gc.find('label').first();
+                if ($inp.length && $lbl.length) {
+                    $lbl.attr('for', $inp.attr('id'));
+                }
+            });
+            // For non-choice fields: map the field label to the first input inside the container
+            $fieldset.find('.gfield').each(function(){
+                const $g = $(this);
+                const $mainLabel = $g.children('.gfield_label[for]').first();
+                if ($mainLabel.length) {
+                    const $firstInput = $g.find('.ginput_container :input').first();
+                    if ($firstInput.length) {
+                        $mainLabel.attr('for', $firstInput.attr('id'));
+                    }
                 }
             });
         }
@@ -369,7 +385,9 @@
 
             // Apply conditional logic inside the active instance
             const $active = instance.instances[instance.currentIndex];
+            // GF conditional logic will be applied via adapter
             this.applyGFConditionalToInstance($active, instance.formId);
+            this.bindInstanceInputs($active, instance.formId);
 
             // Re-run GF conditional logic to re-evaluate visibility
             if (window.gform && typeof window.gform.doConditionalLogic === 'function') {
@@ -447,7 +465,9 @@
                             return;
                         }
 
-                        const nameKey = baseName.endsWith('[]') ? baseName.slice(0, -2) : baseName;
+                        let nameKey = baseName.endsWith('[]') ? baseName.slice(0, -2) : baseName;
+                        // Normalize per-instance names like input_10__i2 back to input_10
+                        nameKey = nameKey.replace(/__i\d+$/, '');
                         if (!instanceData[nameKey]) {
                             instanceData[nameKey] = [];
                         }
@@ -489,7 +509,8 @@
             const evalRule = (rule) => {
                 // Locate inputs for rule.fieldId inside instance by name pattern input_{id}
                 const name = `input_${rule.fieldId}`;
-                const $inputs = $instance.find(`[name='${name}'], [name='${name}[]']`);
+                // Match exact name, array name, or per-instance name with __i{n}
+                const $inputs = $instance.find(`[name='${name}'], [name='${name}[]'], [name^='${name}__i']`);
                 if ($inputs.length === 0) return false;
                 // Support radio/checkbox and text/select basic operators
                 let val = '';
@@ -545,17 +566,33 @@
         }
 
         // Listen to GF conditional logic runs and mirror results into all instances
-        attachGFListeners(formId) {
+        attachGFListeners() {
+            if (this.gfListenerAttached) return;
+            this.gfListenerAttached = true;
             const self = this;
-            $(document).off('gform_post_conditional_logic.gfRepeater').on('gform_post_conditional_logic.gfRepeater', function(e, fid){
-                if (fid !== formId) return;
-                // Re-apply to all instances for this form
-                self.instances.forEach((inst, key) => {
-                    if (inst.formId === formId) {
-                        inst.instances.forEach(($inst) => self.applyGFConditionalToInstance($inst, formId));
+            $(document).on('gform_post_conditional_logic.gfRepeater', function(e, fid){
+                // Re-apply to all instances for this form id
+                self.instances.forEach((inst) => {
+                    if (inst.formId === fid) {
+                        inst.instances.forEach(($inst) => self.applyGFConditionalToInstance($inst, fid));
                     }
                 });
             });
+        }
+
+        // Bind per-instance input changes to trigger immediate logic application
+        bindInstanceInputs($instance, formId) {
+            if (!$instance || !$instance.length) return;
+			$instance.off('change.gfRepeater input.gfRepeater').on('change.gfRepeater input.gfRepeater', ':input', () => {
+				// Let GF evaluate any native targets, then mirror per-instance
+				if (window.gform && typeof window.gform.doConditionalLogic === 'function') {
+					try { window.gform.doConditionalLogic(formId, true); } catch(e) {}
+				}
+				// Apply immediately and also after a microtask to ensure GF completed
+				this.applyGFConditionalToInstance($instance, formId);
+				setTimeout(() => this.applyGFConditionalToInstance($instance, formId), 0);
+				setTimeout(() => this.applyGFConditionalToInstance($instance, formId), 50);
+			});
         }
     }
 
