@@ -87,11 +87,30 @@
 }
 
 .gf-repeater-fieldset {
-	display: none;
+	display: contents;
 }
 
 .gf-repeater-fieldset.active {
+	display: contents;
+}
+
+/* Slider track */
+.gf-repeater-viewport {
+	overflow: hidden;
+	width: 100%;
 	display: block;
+}
+
+.gf-repeater-track {
+	display: flex;
+	gap: 0;
+	width: 100%;
+	transition: transform .3s ease;
+	will-change: transform;
+}
+
+.gf-repeater-instance {
+	min-width: 100%;
 }
 
 .gf-repeater-fieldset.sliding {

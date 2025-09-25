@@ -68,56 +68,59 @@
             $endGField.find('label.gfield_label').removeAttr('for');
             $startGField.find('label.gfield_label').removeAttr('for');
 
-            // Create outer wrapper after the Start field
-            let $outerWrapper = $(`#gf-repeater-wrapper-${fieldId}`);
-            if ($outerWrapper.length === 0) {
-                $outerWrapper = $('<div/>', {
-                    id: `gf-repeater-wrapper-${fieldId}`,
-                    class: 'gf-repeater-wrapper'
-                });
-                $outerWrapper.insertAfter($startGField);
+            // Determine container (Gravity Forms uses .gform_fields)
+            const $container = $startGField.parent();
+
+            // Get all siblings inside the container, regardless of tag (div/fieldset) but with .gfield
+            const $siblings = $container.children('.gfield');
+            const startIdx = $siblings.index($startGField);
+            const endIdx = $siblings.index($endGField);
+            if (startIdx < 0 || endIdx < 0 || endIdx <= startIdx + 1) {
+                return; // nothing to wrap
             }
 
-            // Fieldset container inside wrapper
-            let $fieldset = $outerWrapper.find('fieldset.gf-repeater-fieldset').first();
+            // Slice the fields strictly between Start and End
+            const $range = $siblings.slice(startIdx + 1, endIdx);
+
+            // Wrap the exact range (do this BEFORE inserting our fieldset so relative order remains correct)
+            $range.wrapAll('<div class="gf-repeater-instance"/>');
+
+            // Find the newly created instance (now adjacent to Start)
+            let $firstInstance = $startGField.next('.gf-repeater-instance');
+            if ($firstInstance.length === 0) {
+                // Fallback (should not happen): create empty instance to avoid null refs
+                $firstInstance = $('<div class="gf-repeater-instance"/>');
+            }
+
+            // Create a fieldset immediately after the Start field and move the wrapped instance inside
+            let $fieldset = $(`#gf-fieldset-${fieldId}`);
             if ($fieldset.length === 0) {
                 $fieldset = $('<fieldset/>', {
+                    id: `gf-fieldset-${fieldId}`,
                     class: 'gf-fieldset gf-group-fieldset gf-repeater-fieldset active'
-                });
-                $outerWrapper.append($fieldset);
+                }).attr('data-field-id', fieldId);
+                $fieldset.insertAfter($startGField);
+                // Add viewport + track
+                $fieldset.append('<div class="gf-repeater-viewport"><div class="gf-repeater-track"/></div>');
             }
-
-            // Move fields into first instance container
-            const $between = $startGField.nextUntil($endGField, 'div.gfield');
-            let $firstInstance = $fieldset.find('.gf-repeater-instance').first();
-            if ($firstInstance.length === 0) {
-                $firstInstance = $('<div class="gf-repeater-instance"/>');
-                $fieldset.empty().append($firstInstance);
-            } else {
-                $firstInstance.empty();
+            // Ensure track exists
+            if ($fieldset.find('.gf-repeater-track').length === 0) {
+                $fieldset.append('<div class="gf-repeater-viewport"><div class="gf-repeater-track"/></div>');
             }
-            $between.appendTo($firstInstance);
-
-            // Create slides container for visual transition
-            let $slides = $outerWrapper.find('.gf-repeater-slides');
-            if ($slides.length === 0) {
-                $slides = $('<div class="gf-repeater-slides"/>');
-                $fieldset.wrapInner($slides);
-                $slides = $outerWrapper.find('.gf-repeater-slides');
-            }
+            $fieldset.find('.gf-repeater-track').append($firstInstance);
 
             // Remove the End field from frontend DOM
             $endGField.remove();
 
             // Store repeater instance
+            this.updateFieldsetIds($firstInstance, 0);
             this.instances.set(repeaterId, {
                 formId: formId,
                 fieldId: fieldId,
                 currentIndex: 0,
                 totalInstances: 1,
                 $controls: $controls,
-                $wrapper: $outerWrapper,
-                $slides: $slides,
+                $fieldset: $fieldset,
                 instances: [$firstInstance]
             });
 
@@ -196,6 +199,11 @@
             const $newFieldset = this.createFieldsetInstance(instance);
             instance.instances.push($newFieldset);
             instance.totalInstances++;
+
+            // Append into DOM
+            if (instance.$fieldset && instance.$fieldset.length) {
+                instance.$fieldset.append($newFieldset);
+            }
 
             // Move to the new instance immediately
             instance.currentIndex = instance.totalInstances - 1;
@@ -281,7 +289,13 @@
 
                 if (originalName) {
                     const baseName = originalName.endsWith('[]') ? originalName.slice(0, -2) : originalName;
-                    $field.attr('name', `${baseName}[]`);
+                    const type = ($field.attr('type') || '').toLowerCase();
+                    // Keep controller radios unindexed for GF conditional logic to continue working
+                    if (type === 'radio') {
+                        $field.attr('name', baseName);
+                    } else {
+                        $field.attr('name', `${baseName}[]`);
+                    }
                 }
             });
 
@@ -302,16 +316,28 @@
             const instance = this.instances.get(repeaterId);
             if (!instance) return;
 
-            // Ensure DOM contains all instances in correct order
-            const $slides = instance.$slides;
-            if ($slides && $slides.length) {
-                $slides.empty();
-                instance.instances.forEach(($inst, index) => {
-                    $slides.append($inst);
-                });
-                // Slide to current index
-                const offset = -(instance.currentIndex * 100);
-                $slides.css({ transform: `translateX(${offset}%)` });
+            // Ensure all instances are present inside the track
+            let $track = instance.$fieldset.children('.gf-repeater-track');
+            if ($track.length === 0) {
+                instance.$fieldset.append('<div class="gf-repeater-track"/>');
+                $track = instance.$fieldset.children('.gf-repeater-track');
+            }
+            instance.instances.forEach(($inst) => {
+                if (!$.contains($track[0], $inst[0])) {
+                    $track.append($inst);
+                }
+            });
+
+            // Slide transition using the track
+            const offset = -(instance.currentIndex * 100);
+            $track.css({ transform: `translateX(${offset}%)` });
+            instance.instances.forEach(($inst) => {
+                $inst.css({ minWidth: '100%' });
+            });
+
+            // Re-run GF conditional logic to re-evaluate visibility
+            if (window.gform && typeof window.gform.doConditionalLogic === 'function') {
+                try { window.gform.doConditionalLogic(instance.formId, true); } catch(e) {}
             }
         }
 
