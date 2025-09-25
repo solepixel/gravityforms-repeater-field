@@ -90,11 +90,13 @@
 
             // Apply GF container classes to the instance so inner fields keep layout widths
             let $firstInstance = $startGField.next('.gf-repeater-instance');
-            if ($firstInstance.length) {
-                $firstInstance.addClass('gform_fields top_label form_sublabel_below description_below validation_below');
-            } else {
-                // Fallback (should not happen): create an empty instance to avoid null refs
-                $firstInstance = $('<div class="gf-repeater-instance gform_fields top_label form_sublabel_below description_below validation_below"/>');
+            if ($firstInstance.length === 0) {
+                $firstInstance = $('<div class="gf-repeater-instance"/>');
+            }
+            // Copy classes from the container (e.g., gform_fields top_label ...)
+            const containerClassAttr = ($container.attr('class') || '').trim();
+            if (containerClassAttr) {
+                containerClassAttr.split(/\s+/).forEach(function(cls){ if (cls) { $firstInstance.addClass(cls); } });
             }
 
             // Create a fieldset immediately after the Start field and move the wrapped instance inside
@@ -102,13 +104,22 @@
             if ($fieldset.length === 0) {
                 $fieldset = $('<fieldset/>', {
                     id: `gf-fieldset-${fieldId}`,
-                    class: 'gfield gfield--type-repeater_fieldsets gfield--input-type-repeater_fieldsets gfield--width-full field_sublabel_below gfield--no-description field_description_below field_validation_below gfield_visibility_visible gf-fieldset gf-group-fieldset gf-repeater-fieldset active'
+                    class: 'gf-fieldset gf-group-fieldset gf-repeater-fieldset active'
                 }).attr('data-field-id', fieldId);
                 $fieldset.insertAfter($startGField);
                 $fieldset.append('<div class="gf-repeater-viewport"><div class="gf-repeater-track"/></div>');
-            } else {
-                // Ensure fieldset has the classes even if created previously
-                $fieldset.addClass('gfield gfield--type-repeater_fieldsets gfield--input-type-repeater_fieldsets gfield--width-full field_sublabel_below gfield--no-description field_description_below field_validation_below gfield_visibility_visible gf-fieldset gf-group-fieldset gf-repeater-fieldset active');
+            }
+            // Copy classes from the repeater_start gfield, replacing repeater_start with repeater_fieldsets
+            const startClassAttr = ($startGField.attr('class') || '').trim();
+            if (startClassAttr) {
+                startClassAttr.split(/\s+/).forEach(function(cls){
+                    if (!cls) return;
+                    if (cls.indexOf('repeater_start') !== -1) {
+                        $fieldset.addClass(cls.replace('repeater_start', 'repeater_fieldsets'));
+                    } else {
+                        $fieldset.addClass(cls);
+                    }
+                });
             }
             $fieldset.find('.gf-repeater-track').append($firstInstance);
 
@@ -300,7 +311,8 @@
         }
 
         /**
-         * Update fieldset IDs and names
+         * Update fieldset element IDs and input names for a given instance index,
+         * and remap label `for` attributes to the actual input ids.
          */
         updateFieldsetIds($fieldset, instanceIndex) {
             $fieldset.find('input, textarea, select').each(function() {
@@ -486,7 +498,11 @@
 
         // Removed custom per-field conditional logic; using GF map exclusively
 
-        // Mark all gfield containers in an instance with data-gf-id for safe scoping
+        /**
+         * Annotate a repeater instance with form id and per-field data-gf-id markers.
+         * @param {jQuery} $instance
+         * @param {number} formId
+         */
         setInstanceMeta($instance, formId) {
             if (!$instance || !$instance.length) return;
             $instance.attr('data-gf-form', formId);
@@ -500,7 +516,11 @@
             });
         }
 
-        // Evaluate GF conditional logic map for a single instance
+        /**
+         * Apply Gravity Forms conditional logic map to a single repeater instance.
+         * @param {jQuery} $instance
+         * @param {number} formId
+         */
         applyGFConditionalToInstance($instance, formId) {
             if (!$instance || !$instance.length) return;
             const map = window.gf_form_conditional_logic && window.gf_form_conditional_logic[formId];
@@ -565,7 +585,9 @@
             });
         }
 
-        // Listen to GF conditional logic runs and mirror results into all instances
+        /**
+         * Listen to GF conditional logic runs and mirror results into all instances of the form.
+         */
         attachGFListeners() {
             if (this.gfListenerAttached) return;
             this.gfListenerAttached = true;
@@ -580,7 +602,11 @@
             });
         }
 
-        // Bind per-instance input changes to trigger immediate logic application
+        /**
+         * Bind per-instance input changes to trigger immediate GF logic + per-instance mirroring.
+         * @param {jQuery} $instance
+         * @param {number} formId
+         */
         bindInstanceInputs($instance, formId) {
             if (!$instance || !$instance.length) return;
 			$instance.off('change.gfRepeater input.gfRepeater').on('change.gfRepeater input.gfRepeater', ':input', () => {
