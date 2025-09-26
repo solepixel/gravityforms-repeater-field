@@ -129,6 +129,7 @@
             this.setInstanceMeta($firstInstance, formId);
             this.applyGFConditionalToInstance($firstInstance, formId);
             this.bindInstanceInputs($firstInstance, formId);
+            this.reinitGFUI(formId);
 
             // Remove the End field from frontend DOM
             $endGField.remove();
@@ -235,6 +236,7 @@
             this.setInstanceMeta($newFieldset, instance.formId);
             this.applyGFConditionalToInstance($newFieldset, instance.formId);
             this.bindInstanceInputs($newFieldset, instance.formId);
+            this.reinitGFUI(instance.formId);
 
             // Move to the new instance immediately
             instance.currentIndex = instance.totalInstances - 1;
@@ -328,15 +330,16 @@
                 }
 
                 if (originalId) {
-                    $field.attr('id', `${originalId}_${instanceIndex}`);
+                    // Keep original id for instance 0 (so existing GF hooks bound to original ids still work)
+                    $field.attr('id', instanceIndex === 0 ? originalId : `${originalId}_${instanceIndex}`);
                 }
 
                 if (originalName) {
                     const baseName = originalName.endsWith('[]') ? originalName.slice(0, -2) : originalName;
                     const type = ($field.attr('type') || '').toLowerCase();
-                    // Make radio/checkbox names unique per instance to prevent cross-instance coupling
+                    // Make radio/checkbox names unique for clones but keep original for instance 0
                     if (type === 'radio' || type === 'checkbox') {
-                        $field.attr('name', `${baseName}__i${instanceIndex}`);
+                        $field.attr('name', instanceIndex === 0 ? baseName : `${baseName}__i${instanceIndex}`);
                     } else {
                         $field.attr('name', `${baseName}[]`);
                     }
@@ -400,6 +403,7 @@
             // GF conditional logic will be applied via adapter
             this.applyGFConditionalToInstance($active, instance.formId);
             this.bindInstanceInputs($active, instance.formId);
+            this.reinitGFUI(instance.formId);
 
             // Re-run GF conditional logic to re-evaluate visibility
             if (window.gform && typeof window.gform.doConditionalLogic === 'function') {
@@ -620,6 +624,36 @@
 				setTimeout(() => this.applyGFConditionalToInstance($instance, formId), 50);
 			});
         }
+
+		/**
+		 * Re-initialize Gravity Forms UI features (currency formatting, datepickers, etc.) for this form.
+		 * Triggers gform_post_render which GF listens to for re-binding behaviors on dynamic content.
+		 * @param {number} formId
+		 */
+		reinitGFUI(formId) {
+			try {
+				$(document).trigger('gform_post_render', [formId, 1]);
+			} catch(e) {}
+			// Some GF builds expose helpers; call defensively if present
+			try {
+				if (typeof window.gformInitDatepicker === 'function') { window.gformInitDatepicker(); }
+			} catch(e) {}
+			// Try to initialize currency formatting for inputs inside repeater instances heuristically
+			try {
+				if (typeof window.gformInitCurrencyFormatFields === 'function') {
+					const $scope = jQuery(`#gform_fields_${formId}`);
+					const selectors = [];
+					// Focus specifically on number/currency-related containers within repeater instances
+					$scope.find('.gf-repeater-instance .ginput_container_number :input, .gf-repeater-instance .ginput_container_currency :input, .gf-repeater-instance .ginput_amount').each(function(){
+						const id = jQuery(this).attr('id');
+						if (id) { selectors.push(`#${id}`); }
+					});
+					if (selectors.length) {
+						window.gformInitCurrencyFormatFields(selectors.join(','));
+					}
+				}
+			} catch(e) {}
+		}
     }
 
     // Initialize when document is ready
