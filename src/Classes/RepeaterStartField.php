@@ -122,6 +122,53 @@ class RepeaterStartField extends GF_Field {
 			$form_id
 		);
 
-		return $header . $hidden_input;
+		$val = is_string( $value ) ? $value : '';
+		return sprintf(
+			'<div class="gf-repeater-header">%s%s</div><input type="hidden" class="gf-repeater-data-input" name="input_%d" id="input_%d_%d" value="%s">',
+			$title,
+			$controls,
+			$field_id,
+			$form_id,
+			$field_id,
+			esc_attr( $val )
+		);
     }
+
+			/**
+			 * Return submitted value (JSON) for saving and re-render during validation.
+			 *
+			 * @param array $field_values
+			 * @param bool  $get_from_post_global
+			 * @return mixed
+			 */
+			public function get_value_submission( $field_values, $get_from_post_global = false ) {
+				$input_name = 'input_' . (int) $this->id;
+				$value = rgpost( $input_name );
+				// Ensure we return the value for re-rendering
+				return $value;
+			}
+
+			/**
+			 * Store JSON as-is in the entry value (string).
+			 *
+			 * @param mixed $value
+			 * @param int   $form_id
+			 * @param string $field_id
+			 * @param array $entry
+			 * @param array $form
+			 * @return string
+			 */
+			public function sanitize_entry_value( $value, $form_id, $field_id = '', $entry = array(), $form = array() ) {
+				return (string) $value;
+			}
+
+			/**
+			 * Override to ensure the field value is properly set for re-rendering.
+			 *
+			 * @param mixed $value
+			 * @return void
+			 */
+			public function set_value( $value ) {
+				$this->value = $value;
+			}
 }

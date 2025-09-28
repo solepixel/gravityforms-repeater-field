@@ -126,6 +126,9 @@ class Core {
 
 		// Initialize admin display
 		new AdminDisplay();
+
+		// Initialize server-side validation for repeater instances
+		new Validation();
 	}
 
 	/**

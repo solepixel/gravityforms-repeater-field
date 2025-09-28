@@ -29,15 +29,24 @@
         /**
          * Bind event handlers
          */
-        bindEvents() {
-            $(document).on('click', '.gf-repeater-add', this.handleAdd.bind(this));
-            $(document).on('click', '.gf-repeater-remove', this.handleRemove.bind(this));
-            $(document).on('click', '.gf-repeater-prev', this.handlePrev.bind(this));
-            $(document).on('click', '.gf-repeater-next', this.handleNext.bind(this));
+		bindEvents() {
+			$(document).on('click', '.gf-repeater-add', this.handleAdd.bind(this));
+			$(document).on('click', '.gf-repeater-remove', this.handleRemove.bind(this));
+			$(document).on('click', '.gf-repeater-prev', this.handlePrev.bind(this));
+			$(document).on('click', '.gf-repeater-next', this.handleNext.bind(this));
 
-            // Handle form submission
-            $(document).on('gform_pre_submission', this.handleFormSubmission.bind(this));
-        }
+			// Handle form submission (GF lifecycle)
+			$(document).on('gform_pre_submission', this.handleFormSubmission.bind(this));
+
+			// Also pack data on form submit (before validation)
+			$(document).on('submit', 'form[id^="gform_"]', (e) => {
+				const $form = $(e.currentTarget);
+				const idMatch = ($form.attr('id') || '').match(/^gform_(\d+)$/);
+				if (idMatch) {
+					this.processRepeaterData(parseInt(idMatch[1], 10));
+				}
+			});
+		}
 
         /**
          * Initialize existing repeaters on page load
@@ -134,6 +143,18 @@
             // Remove the End field from frontend DOM
             $endGField.remove();
 
+            // Prepare a pristine template for future clones
+            const $templateInstance = $firstInstance.clone(false, false);
+            // Clear values and validation from template
+            $templateInstance.find('input, textarea, select').each(function(){
+                const $field = $(this);
+                const type = ($field.attr('type') || '').toLowerCase();
+                if (type === 'radio' || type === 'checkbox') { $field.prop('checked', false); }
+                else if ($field.is('select')) { $field.prop('selectedIndex', 0); }
+                else { $field.val(''); }
+            });
+            this.sanitizeInstanceUI($templateInstance);
+
             // Store repeater instance
             this.updateFieldsetIds($firstInstance, 0);
             this.instances.set(repeaterId, {
@@ -143,11 +164,78 @@
                 totalInstances: 1,
                 $controls: $controls,
                 $fieldset: $fieldset,
-                instances: [$firstInstance]
+                instances: [$firstInstance],
+                $template: $templateInstance
             });
 
             // Set up initial state
             this.updateControls(repeaterId);
+
+			// If hidden input has JSON data (after validation reload), restore instances and values
+			const $hidden = $(`#input_${formId}_${fieldId}`);
+			if ($hidden.length) {
+				const raw = $hidden.val();
+				if (raw && raw.trim() !== '') {
+					try {
+						const data = JSON.parse(raw);
+						if (Array.isArray(data) && data.length > 1) {
+							// Clear the first instance if it's empty and we have data to restore
+							const instObj = this.instances.get(repeaterId);
+							if (instObj.totalInstances === 1 && Object.keys(data[0]).length === 0) {
+								instObj.instances[0].remove();
+								instObj.instances.splice(0, 1);
+								instObj.totalInstances = 0;
+							}
+
+							// Create instances to match data length
+							for (let i = 0; i < data.length; i++) {
+								const $instanceToPopulate = (i === 0 && instObj.instances.length > 0) ? instObj.instances[0] : this.addInstance(repeaterId, false);
+								this.populateInstance($instanceToPopulate, data[i], formId);
+							}
+
+							// Ensure current index is valid and update display
+							instObj.currentIndex = Math.min(instObj.currentIndex, instObj.totalInstances - 1);
+							this.updateDisplay(repeaterId);
+							this.updateControls(repeaterId);
+						}
+					} catch(e) {
+						console.error("Error parsing repeater data from hidden input:", e);
+					}
+				}
+			}
+        }
+
+        /**
+         * Populate an instance with values.
+         * @param {jQuery} $instance The instance to populate.
+         * @param {object} values The values to set.
+         * @param {number} formId The form ID.
+         * @returns {void}
+         */
+        populateInstance($instance, values, formId) {
+            Object.keys(values).forEach((baseKey) => {
+                const arr = values[baseKey];
+                if (!Array.isArray(arr)) return;
+
+                // Find inputs by original base name within this instance
+                const $inputs = $instance.find(`:input[name='${baseKey}'], :input[name='${baseKey}[]'], :input[name^='${baseKey}__i'], :input[data-gf-repeater-original-name='${baseKey}']`);
+                if ($inputs.length === 0) return;
+
+                const type = ($inputs.first().attr('type') || '').toLowerCase();
+                if (type === 'radio') {
+                    $inputs.prop('checked', false);
+                    if (arr.length) { $inputs.filter(`[value='${arr[0]}']`).prop('checked', true).trigger('change'); }
+                } else if (type === 'checkbox') {
+                    $inputs.prop('checked', false);
+                    arr.forEach((v) => { $inputs.filter(`[value='${v}']`).prop('checked', true).trigger('change'); });
+                } else if ($inputs.is('select')) {
+                    $inputs.val(arr[0] || '').trigger('change');
+                } else {
+                    $inputs.val(arr[0] || '').trigger('input');
+                }
+            });
+            this.applyGFConditionalToInstance($instance, formId);
+            this.reinitGFUI(formId);
         }
 
         /**
@@ -289,8 +377,8 @@
          * Create a new fieldset instance
          */
         createFieldsetInstance(instance) {
-            const $original = instance.instances[0];
-            const $newFieldset = $original.clone(true, true);
+            const $template = instance.$template ? instance.$template : instance.instances[0];
+            const $newFieldset = $template.clone(false, false);
             $newFieldset.addClass('gf-repeater-instance gform_fields top_label form_sublabel_below description_below validation_below');
 
             // Update IDs and names for the new instance
@@ -308,6 +396,9 @@
                     $field.val('');
                 }
             });
+
+            // Ensure we don't copy validation error UI from other instances
+            this.sanitizeInstanceUI($newFieldset);
 
             return $newFieldset;
         }
@@ -337,11 +428,18 @@
                 if (originalName) {
                     const baseName = originalName.endsWith('[]') ? originalName.slice(0, -2) : originalName;
                     const type = ($field.attr('type') || '').toLowerCase();
-                    // Make radio/checkbox names unique for clones but keep original for instance 0
+                    const isOther = /_other$/.test(baseName);
+                    // Radios/checkboxes: keep base for instance 0, unique name for clones
                     if (type === 'radio' || type === 'checkbox') {
                         $field.attr('name', instanceIndex === 0 ? baseName : `${baseName}__i${instanceIndex}`);
                     } else {
-                        $field.attr('name', `${baseName}[]`);
+                        // Non-choice fields: instance 0 keeps original base (no []), clones get unique names
+                        if (instanceIndex === 0) {
+                            // Preserve *_other[] exactly as GF outputs; otherwise use baseName
+                            $field.attr('name', isOther && originalName.endsWith('[]') ? originalName : baseName);
+                        } else {
+                            $field.attr('name', `${baseName}__i${instanceIndex}`);
+                        }
                     }
                 }
             });
@@ -398,9 +496,12 @@
                 $inst.css({ minWidth: '100%' });
             });
 
-            // Apply conditional logic inside the active instance
+            // Adjust viewport height to active instance to prevent residual gap from other instances
             const $active = instance.instances[instance.currentIndex];
-            // GF conditional logic will be applied via adapter
+            const activeHeight = $active.outerHeight(true);
+            $viewport.css('height', activeHeight + 'px');
+
+            // Apply conditional logic inside the active instance
             this.applyGFConditionalToInstance($active, instance.formId);
             this.bindInstanceInputs($active, instance.formId);
             this.reinitGFUI(instance.formId);
@@ -409,6 +510,9 @@
             if (window.gform && typeof window.gform.doConditionalLogic === 'function') {
                 try { window.gform.doConditionalLogic(instance.formId, true); } catch(e) {}
             }
+
+            // Final height adjustment after potential DOM changes
+            this.adjustViewportHeight(repeaterId);
         }
 
         /**
@@ -447,7 +551,7 @@
          * Handle form submission
          */
         handleFormSubmission(e, form) {
-            // Process repeater data before submission
+            // Process repeater data before submission in GF’s lifecycle
             this.processRepeaterData(form);
         }
 
@@ -455,12 +559,16 @@
          * Process repeater data for submission
          */
         processRepeaterData(form) {
-            // Flatten repeater fields into array format capturing each instance's values
-            if (!form || !form.id) {
-                return;
+            // Accept form object or numeric formId
+            let formId = null;
+            if (typeof form === 'number') {
+                formId = form;
+            } else if (form && form.id) {
+                formId = form.id;
             }
+            if (!formId) return;
 
-            const formId = form.id;
+            // Flatten repeater fields into array format capturing each instance's values
             $('.gf-fieldset.gf-repeater-fieldset').each(function(){
                 const $fieldset = $(this);
                 const fieldId = $fieldset.data('fieldId');
@@ -497,6 +605,9 @@
                 if ($hidden && $hidden.length) {
                     $hidden.val(JSON.stringify(instancesData));
                 }
+
+                // After packing JSON, disable only cloned inputs (names with __iN) so GF doesn't process them
+                $fieldset.find('.gf-repeater-instance :input[name*="__i"]').prop('disabled', true);
             });
         }
 
@@ -601,6 +712,9 @@
                 self.instances.forEach((inst) => {
                     if (inst.formId === fid) {
                         inst.instances.forEach(($inst) => self.applyGFConditionalToInstance($inst, fid));
+                        // Also adjust heights for each repeater on this form
+                        const repeaterId = `gf-repeater-${fid}-${inst.fieldId}`;
+                        self.adjustViewportHeight(repeaterId);
                     }
                 });
             });
@@ -622,6 +736,22 @@
 				this.applyGFConditionalToInstance($instance, formId);
 				setTimeout(() => this.applyGFConditionalToInstance($instance, formId), 0);
 				setTimeout(() => this.applyGFConditionalToInstance($instance, formId), 50);
+				// Adjust viewport height after potential content changes
+				this.instances.forEach((inst, key) => {
+					if (inst.formId === formId) {
+						const repeaterId = `gf-repeater-${formId}-${inst.fieldId}`;
+						this.adjustViewportHeight(repeaterId);
+					}
+				});
+			});
+			// On window resize, recalc height for this form's repeaters
+			$(window).off('resize.gfRepeaterHeight').on('resize.gfRepeaterHeight', () => {
+				this.instances.forEach((inst) => {
+					if (inst.formId === formId) {
+						const repeaterId = `gf-repeater-${formId}-${inst.fieldId}`;
+						this.adjustViewportHeight(repeaterId);
+					}
+				});
 			});
         }
 
@@ -654,11 +784,46 @@
 				}
 			} catch(e) {}
 		}
+
+		/**
+		 * Remove any validation UI artifacts from a cloned instance.
+		 * @param {jQuery} $instance
+		 */
+		sanitizeInstanceUI($instance) {
+			if (!$instance || !$instance.length) return;
+			$instance.find('.gfield.gfield_error').removeClass('gfield_error');
+			$instance.find('.validation_message, .gfield_description.validation_message').remove();
+			$instance.find(':input[aria-invalid="true"]').attr('aria-invalid', 'false');
+		}
+
+		/**
+		 * Adjust the viewport height to match the active instance's outer height.
+		 * @param {string} repeaterId
+		 */
+		adjustViewportHeight(repeaterId) {
+			const instance = this.instances.get(repeaterId);
+			if (!instance) return;
+			const $viewport = instance.$fieldset.find('.gf-repeater-viewport');
+			if ($viewport.length === 0) return;
+			const $active = instance.instances[instance.currentIndex];
+			if (!$active || !$active.length) return;
+			const h = $active.outerHeight(true);
+			$viewport.css('height', h + 'px');
+		}
     }
 
     // Initialize when document is ready
     $(document).ready(function() {
-        new GFRepeaterField();
+        window.gfRepeaterController = new GFRepeaterField();
+    });
+
+    // Re-initialize on GF post render (e.g., after AJAX or validation re-render)
+    $(document).on('gform_post_render', function(event, formId){
+        try {
+            if (window.gfRepeaterController) {
+                window.gfRepeaterController.initializeRepeaters();
+            }
+        } catch(e) {}
     });
 
 })(jQuery);
