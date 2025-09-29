@@ -22,6 +22,7 @@
          * Initialize the repeater field functionality
          */
         init() {
+            console.log('GF Repeater Field: Initializing...');
             this.bindEvents();
             this.initializeRepeaters();
         }
@@ -52,12 +53,14 @@
          * Initialize existing repeaters on page load
          */
         initializeRepeaters() {
+            console.log('GF Repeater Field: Initializing repeaters...');
             $('.gf-repeater-controls').each((index, element) => {
                 const $controls = $(element);
                 const formId = $controls.data('form-id');
                 const fieldId = $controls.data('field-id');
 
                 if (formId && fieldId) {
+                    console.log(`GF Repeater Field: Setting up repeater ${formId}-${fieldId}`);
                     this.initializeRepeater(formId, fieldId, $controls);
                     // Attach GF listeners once globally
                     this.attachGFListeners();
@@ -69,9 +72,20 @@
          * Initialize a specific repeater
          */
         initializeRepeater(formId, fieldId, $controls) {
+            console.log(`GF Repeater Field: Initializing repeater ${formId}-${fieldId}`);
             const repeaterId = `gf-repeater-${formId}-${fieldId}`;
+
+            // Check if already initialized
+            if (this.instances.has(repeaterId)) {
+                console.log(`GF Repeater Field: Repeater ${repeaterId} already initialized, skipping...`);
+                return;
+            }
+
             const $startGField = $(`#field_${formId}_${fieldId}`);
-            if ($startGField.length === 0) return;
+            if ($startGField.length === 0) {
+                console.log(`GF Repeater Field: Start field not found for ${formId}-${fieldId}`);
+                return;
+            }
 
             const $endGField = $startGField.nextAll('div.gfield.gfield--type-repeater_end').first();
             if ($endGField.length === 0) return;
@@ -175,9 +189,11 @@
 			const $hidden = $(`#input_${formId}_${fieldId}`);
 			if ($hidden.length) {
 				const raw = $hidden.val();
+				console.log(`GF Repeater Field: Hidden input value:`, raw);
 				if (raw && raw.trim() !== '') {
 					try {
 						const data = JSON.parse(raw);
+						console.log(`GF Repeater Field: Parsed data:`, data);
 						if (Array.isArray(data) && data.length > 1) {
 							// Clear the first instance if it's empty and we have data to restore
 							const instObj = this.instances.get(repeaterId);
@@ -187,11 +203,26 @@
 								instObj.totalInstances = 0;
 							}
 
-							// Create instances to match data length
-							for (let i = 0; i < data.length; i++) {
-								const $instanceToPopulate = (i === 0 && instObj.instances.length > 0) ? instObj.instances[0] : this.addInstance(repeaterId, false);
-								this.populateInstance($instanceToPopulate, data[i], formId);
-							}
+            // Create instances to match data length
+            for (let i = 0; i < data.length; i++) {
+                let $instanceToPopulate;
+                if (i === 0 && instObj.instances.length > 0) {
+                    $instanceToPopulate = instObj.instances[0];
+                } else {
+                    $instanceToPopulate = this.addInstance(repeaterId, false);
+                }
+
+                if ($instanceToPopulate && $instanceToPopulate.length) {
+                    this.populateInstance($instanceToPopulate, data[i], formId);
+                } else {
+                    console.error(`Failed to create instance ${i} for repeater ${repeaterId}`);
+                }
+            }
+
+            // Wait a moment for GF to apply validation errors, then copy them
+            setTimeout(() => {
+                this.copyValidationErrorsToInstances(instObj.instances, data);
+            }, 100);
 
 							// Ensure current index is valid and update display
 							instObj.currentIndex = Math.min(instObj.currentIndex, instObj.totalInstances - 1);
@@ -217,17 +248,24 @@
                 const arr = values[baseKey];
                 if (!Array.isArray(arr)) return;
 
-                // Find inputs by original base name within this instance
-                const $inputs = $instance.find(`:input[name='${baseKey}'], :input[name='${baseKey}[]'], :input[name^='${baseKey}__i'], :input[data-gf-repeater-original-name='${baseKey}']`);
+                // Find inputs by their data-gf-repeater-original-name attribute
+                const $inputs = $instance.find(`:input[data-gf-repeater-original-name='${baseKey}']`);
                 if ($inputs.length === 0) return;
 
                 const type = ($inputs.first().attr('type') || '').toLowerCase();
                 if (type === 'radio') {
                     $inputs.prop('checked', false);
-                    if (arr.length) { $inputs.filter(`[value='${arr[0]}']`).prop('checked', true).trigger('change'); }
+                    // Only select if we have a valid value that's not empty or gf_other_choice
+                    if (arr.length && arr[0] && arr[0] !== '' && arr[0] !== 'gf_other_choice') {
+                        $inputs.filter(`[value='${arr[0]}']`).prop('checked', true).trigger('change');
+                    }
                 } else if (type === 'checkbox') {
                     $inputs.prop('checked', false);
-                    arr.forEach((v) => { $inputs.filter(`[value='${v}']`).prop('checked', true).trigger('change'); });
+                    arr.forEach((v) => {
+                        if (v && v !== '' && v !== 'gf_other_choice') {
+                            $inputs.filter(`[value='${v}']`).prop('checked', true).trigger('change');
+                        }
+                    });
                 } else if ($inputs.is('select')) {
                     $inputs.val(arr[0] || '').trigger('change');
                 } else {
@@ -236,6 +274,73 @@
             });
             this.applyGFConditionalToInstance($instance, formId);
             this.reinitGFUI(formId);
+        }
+
+        /**
+         * Copy validation errors to instances based on their specific data.
+         * @param {Array} instances Array of instance jQuery objects.
+         * @param {Array} data Array of data for each instance.
+         * @returns {void}
+         */
+        copyValidationErrorsToInstances(instances, data) {
+            console.log('GF Repeater Field: Copying validation errors to instances...');
+            console.log('Instances:', instances.length);
+            console.log('Data:', data);
+
+            if (instances.length <= 1) return;
+
+            // For each instance, check if it has validation errors based on its data
+            instances.forEach(($instance, instanceIndex) => {
+                console.log(`Processing instance ${instanceIndex + 1}...`);
+                const instanceData = data[instanceIndex];
+                if (!instanceData) {
+                    console.log(`No data for instance ${instanceIndex + 1}`);
+                    return;
+                }
+
+                console.log(`Instance ${instanceIndex + 1} data:`, instanceData);
+
+                // Check ALL required fields in this instance, not just the ones with data
+                $instance.find('.gfield.gfield_contains_required').each(function() {
+                    const $field = $(this);
+                    const $input = $field.find(':input[data-gf-repeater-original-name]').first();
+                    if (!$input.length) return;
+
+                    const fieldKey = $input.data('gf-repeater-original-name');
+                    if (!fieldKey) return;
+
+                    console.log(`Checking field ${fieldKey} in instance ${instanceIndex + 1}`);
+
+                    // Check if this field has data in the instanceData
+                    const fieldValues = instanceData[fieldKey];
+                    const hasValue = fieldValues && Array.isArray(fieldValues) && fieldValues.some(val => val && val !== '');
+
+                    console.log(`Field ${fieldKey}: hasValue=${hasValue}, isRequired=true`);
+
+                    if (!hasValue) {
+                        // This field should have a validation error
+                        console.log(`Adding validation error to field ${fieldKey} in instance ${instanceIndex + 1}`);
+                        $field.addClass('gfield_error');
+                        $field.attr('aria-invalid', 'true');
+                        $field.find(':input').attr('aria-invalid', 'true');
+
+                        // Add or update validation message
+                        let $message = $field.find('.validation_message');
+                        if (!$message.length) {
+                            $message = $('<div class="gfield_description validation_message gfield_validation_message"></div>');
+                            $field.append($message);
+                        }
+                        $message.text(`This field is required for group ${instanceIndex + 1}.`);
+                    } else {
+                        // This field should not have validation errors
+                        console.log(`Removing validation error from field ${fieldKey} in instance ${instanceIndex + 1}`);
+                        $field.removeClass('gfield_error');
+                        $field.attr('aria-invalid', 'false');
+                        $field.find(':input').attr('aria-invalid', 'false');
+                        $field.find('.validation_message').remove();
+                    }
+                });
+            });
         }
 
         /**
@@ -301,7 +406,7 @@
         /**
          * Add a new instance
          */
-        addInstance(repeaterId) {
+        addInstance(repeaterId, navigate = true) {
             const instance = this.instances.get(repeaterId);
             if (!instance) return;
 
@@ -326,12 +431,15 @@
             this.bindInstanceInputs($newFieldset, instance.formId);
             this.reinitGFUI(instance.formId);
 
-            // Move to the new instance immediately
-            instance.currentIndex = instance.totalInstances - 1;
+            // Move to the new instance immediately if navigate is true
+            if (navigate) {
+                instance.currentIndex = instance.totalInstances - 1;
+                // Update display
+                this.updateDisplay(repeaterId);
+                this.updateControls(repeaterId);
+            }
 
-            // Update display
-            this.updateDisplay(repeaterId);
-            this.updateControls(repeaterId);
+            return $newFieldset;
         }
 
         /**
@@ -418,6 +526,12 @@
                 }
                 if (!$field.data('gfRepeaterOriginalName')) {
                     $field.data('gfRepeaterOriginalName', originalName);
+                }
+
+                // Set the data attribute for easy lookup during population
+                if (originalName) {
+                    const baseName = originalName.endsWith('[]') ? originalName.slice(0, -2) : originalName;
+                    $field.attr('data-gf-repeater-original-name', baseName);
                 }
 
                 if (originalId) {
@@ -592,10 +706,42 @@
                         let nameKey = baseName.endsWith('[]') ? baseName.slice(0, -2) : baseName;
                         // Normalize per-instance names like input_10__i2 back to input_10
                         nameKey = nameKey.replace(/__i\d+$/, '');
+
+                        const type = ($field.attr('type') || '').toLowerCase();
+                        const value = $field.val();
+
+                        // For radios/checkboxes, only include if they are actually checked
+                        if (type === 'radio' || type === 'checkbox') {
+                            if (!$field.is(':checked')) {
+                                return; // Skip unchecked radio/checkbox inputs
+                            }
+                        }
+
+                        // For text inputs, only include if they have a meaningful value
+                        if (type === 'text' || type === 'number' || type === 'email' || type === 'url' || type === 'tel') {
+                            if (!value || value.trim() === '') {
+                                return; // Skip empty text inputs
+                            }
+                        }
+
+                        // For textareas, only include if they have a meaningful value
+                        if ($field.is('textarea')) {
+                            if (!value || value.trim() === '') {
+                                return; // Skip empty textareas
+                            }
+                        }
+
+                        // For selects, only include if they have a selected value (not placeholder)
+                        if ($field.is('select')) {
+                            if (!value || value === '' || $field.find('option:selected').hasClass('gf_placeholder')) {
+                                return; // Skip empty selects or placeholder selections
+                            }
+                        }
+
                         if (!instanceData[nameKey]) {
                             instanceData[nameKey] = [];
                         }
-                        instanceData[nameKey].push($field.val());
+                        instanceData[nameKey].push(value);
                     });
 
                     instancesData.push(instanceData);
