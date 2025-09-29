@@ -255,14 +255,14 @@
                 const type = ($inputs.first().attr('type') || '').toLowerCase();
                 if (type === 'radio') {
                     $inputs.prop('checked', false);
-                    // Only select if we have a valid value that's not empty or gf_other_choice
-                    if (arr.length && arr[0] && arr[0] !== '' && arr[0] !== 'gf_other_choice') {
+                    // Only select if we have a valid value that's not empty
+                    if (arr.length && arr[0] && arr[0] !== '') {
                         $inputs.filter(`[value='${arr[0]}']`).prop('checked', true).trigger('change');
                     }
                 } else if (type === 'checkbox') {
                     $inputs.prop('checked', false);
                     arr.forEach((v) => {
-                        if (v && v !== '' && v !== 'gf_other_choice') {
+                        if (v && v !== '') {
                             $inputs.filter(`[value='${v}']`).prop('checked', true).trigger('change');
                         }
                     });
@@ -696,6 +696,8 @@
                     const $instance = $(this);
                     const instanceData = {};
 
+                    console.log(`GF Repeater Field: Processing instance ${instanceIndex + 1} for data collection`);
+
                     $instance.find('input, textarea, select').each(function(){
                         const $field = $(this);
                         const baseName = $field.data('gfRepeaterOriginalName') || $field.attr('name');
@@ -709,10 +711,14 @@
 
                         const type = ($field.attr('type') || '').toLowerCase();
                         const value = $field.val();
+                        const isChecked = $field.is(':checked');
+
+                        console.log(`GF Repeater Field: Field ${nameKey} (type: ${type}, value: ${value}, checked: ${isChecked})`);
 
                         // For radios/checkboxes, only include if they are actually checked
                         if (type === 'radio' || type === 'checkbox') {
-                            if (!$field.is(':checked')) {
+                            if (!isChecked) {
+                                console.log(`GF Repeater Field: Skipping unchecked ${type} field ${nameKey}`);
                                 return; // Skip unchecked radio/checkbox inputs
                             }
                         }
@@ -720,6 +726,7 @@
                         // For text inputs, only include if they have a meaningful value
                         if (type === 'text' || type === 'number' || type === 'email' || type === 'url' || type === 'tel') {
                             if (!value || value.trim() === '') {
+                                console.log(`GF Repeater Field: Skipping empty text field ${nameKey}`);
                                 return; // Skip empty text inputs
                             }
                         }
@@ -727,6 +734,7 @@
                         // For textareas, only include if they have a meaningful value
                         if ($field.is('textarea')) {
                             if (!value || value.trim() === '') {
+                                console.log(`GF Repeater Field: Skipping empty textarea ${nameKey}`);
                                 return; // Skip empty textareas
                             }
                         }
@@ -734,6 +742,7 @@
                         // For selects, only include if they have a selected value (not placeholder)
                         if ($field.is('select')) {
                             if (!value || value === '' || $field.find('option:selected').hasClass('gf_placeholder')) {
+                                console.log(`GF Repeater Field: Skipping empty/placeholder select ${nameKey}`);
                                 return; // Skip empty selects or placeholder selections
                             }
                         }
@@ -742,8 +751,10 @@
                             instanceData[nameKey] = [];
                         }
                         instanceData[nameKey].push(value);
+                        console.log(`GF Repeater Field: Collected value for ${nameKey}: ${value}`);
                     });
 
+                    console.log(`GF Repeater Field: Instance ${instanceIndex + 1} data:`, instanceData);
                     instancesData.push(instanceData);
                 });
 
