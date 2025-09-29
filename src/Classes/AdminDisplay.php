@@ -27,135 +27,49 @@ class AdminDisplay {
 	 */
 	private function init(): void {
 		// Modify entry display for repeater fields
-		add_filter( 'gform_field_content', [ $this, 'modify_entry_display' ], 10, 5 );
+		add_filter( 'gform_entry_field_value', [ $this, 'modify_entry_display' ], 10, 4 );
 
-		// Add custom display for repeater data
-		add_action( 'gform_entry_detail_content_before', [ $this, 'display_repeater_data' ], 10, 2 );
+		// Display structured repeater data
+		add_action( 'gform_entries_detail_content_after', [ $this, 'display_repeater_data' ], 10, 2 );
 	}
 
 	/**
 	 * Modify entry display for repeater fields
 	 *
-	 * @param string $content
-	 * @param array $field
 	 * @param string $value
-	 * @param int $lead_id
+	 * @param array $field
+	 * @param array $entry
 	 * @param int $form_id
 	 * @return string
 	 */
-	public function modify_entry_display( $content, $field, $value, $lead_id, $form_id ): string {
-		if ( $field->type === 'group' ) {
-			$content = $this->get_repeater_entry_display( $field, $value, $lead_id, $form_id );
-		}
-
-		return $content;
-	}
-
-	/**
-	 * Get repeater entry display
-	 *
-	 * @param array $field
-	 * @param string $value
-	 * @param int $lead_id
-	 * @param int $form_id
-	 * @return string
-	 */
-	private function get_repeater_entry_display( $field, $value, $lead_id, $form_id ): string {
-		$repeater_data = $this->get_repeater_data( $field, $lead_id, $form_id );
-
-		if ( empty( $repeater_data ) ) {
-			return '<div class="gf-repeater-empty">' . __( 'No data available', 'gravityforms-repeater-field' ) . '</div>';
-		}
-
-		$output = '<div class="gf-repeater-entry-display">';
-		$output .= '<h4>' . esc_html( $field->label ) . '</h4>';
-		$output .= '<div class="gf-repeater-instances">';
-
-		foreach ( $repeater_data as $index => $instance ) {
-			$output .= '<div class="gf-repeater-instance">';
-			$output .= '<h5>' . sprintf( __( 'Instance %d', 'gravityforms-repeater-field' ), $index + 1 ) . '</h5>';
-			$output .= '<div class="gf-repeater-fields">';
-
-			foreach ( $instance as $field_id => $field_value ) {
-				$field_obj = \GFAPI::get_field( $form_id, $field_id );
-				if ( $field_obj ) {
-					$output .= '<div class="gf-repeater-field">';
-					$output .= '<label>' . esc_html( $field_obj->label ) . ':</label> ';
-					$output .= '<span>' . esc_html( $field_value ) . '</span>';
-					$output .= '</div>';
+	public function modify_entry_display( $value, $field, $entry, $form_id ): string {
+		// Handle repeater_start field - show submission count.
+		if ( 'repeater_start' === $field->type ) {
+			if ( ! empty( $value ) ) {
+				$decoded_data = json_decode( $value, true );
+				if ( is_array( $decoded_data ) && ! empty( $decoded_data ) ) {
+					$count = count( $decoded_data );
+					return $count . ' ' . ( $count === 1 ? 'submission' : 'submissions' );
 				}
 			}
-
-			$output .= '</div>';
-			$output .= '</div>';
+			return '0 submissions';
 		}
 
-		$output .= '</div>';
-		$output .= '</div>';
+		// Hide repeater_end field from entry display.
+		if ( 'repeater_end' === $field->type ) {
+			return '';
+		}
 
-		return $output;
+		// Hide individual fields that are within repeater groups.
+		if ( $this->is_field_in_repeater_group( $field, $form_id ) ) {
+			return '';
+		}
+
+		return $value;
 	}
 
 	/**
-	 * Get repeater data for entry
-	 *
-	 * @param array $field
-	 * @param int $lead_id
-	 * @param int $form_id
-	 * @return array
-	 */
-	private function get_repeater_data( $field, $lead_id, $form_id ): array {
-		$entry = \GFAPI::get_entry( $lead_id );
-		if ( is_wp_error( $entry ) ) {
-			return [];
-		}
-
-		$repeater_data = [];
-		$section_fields = $this->get_section_fields( $field, $form_id );
-
-		// Group fields by instance
-		foreach ( $section_fields as $section_field ) {
-			$field_value = rgar( $entry, $section_field->id );
-			if ( ! empty( $field_value ) ) {
-				$repeater_data[0][$section_field->id] = $field_value;
-			}
-		}
-
-		return $repeater_data;
-	}
-
-	/**
-	 * Get section fields
-	 *
-	 * @param array $section_field
-	 * @param int $form_id
-	 * @return array
-	 */
-	private function get_section_fields( $section_field, $form_id ): array {
-		$form = \GFAPI::get_form( $form_id );
-		$section_fields = [];
-
-		$in_section = false;
-		foreach ( $form['fields'] as $field ) {
-			if ( $field->id === $section_field->id ) {
-				$in_section = true;
-				continue;
-			}
-
-			if ( $in_section && $field->type === 'section' ) {
-				break;
-			}
-
-			if ( $in_section ) {
-				$section_fields[] = $field;
-			}
-		}
-
-		return $section_fields;
-	}
-
-	/**
-	 * Display repeater data
+	 * Display repeater data in entry details
 	 *
 	 * @param int $form_id
 	 * @param int $lead_id
@@ -163,24 +77,132 @@ class AdminDisplay {
 	 */
 	public function display_repeater_data( $form_id, $lead_id ): void {
 		$form = \GFAPI::get_form( $form_id );
-		$has_repeater_sections = false;
+		$entry = \GFAPI::get_entry( $lead_id );
 
-		foreach ( $form['fields'] as $field ) {
-			if ( $field->type === 'group' ) {
-				$has_repeater_sections = true;
-				break;
-			}
-		}
-
-		if ( ! $has_repeater_sections ) {
+		if ( is_wp_error( $entry ) ) {
 			return;
 		}
 
-		echo '<div class="gf-repeater-data-display">';
-		echo '<h3>' . __( 'Repeater Field Data', 'gravityforms-repeater-field' ) . '</h3>';
-		echo '<div class="gf-repeater-summary">';
-		echo '<p>' . __( 'This entry contains repeater field data. Use the controls above to navigate between instances.', 'gravityforms-repeater-field' ) . '</p>';
-		echo '</div>';
-		echo '</div>';
+		$has_repeater_fields = false;
+		$repeater_data = [];
+
+		// Find all repeater_start fields and their data.
+		foreach ( $form['fields'] as $field ) {
+			if ( 'repeater_start' === $field->type ) {
+				$has_repeater_fields = true;
+				$field_value = rgar( $entry, $field->id );
+
+				if ( ! empty( $field_value ) ) {
+					$decoded_data = json_decode( $field_value, true );
+					if ( is_array( $decoded_data ) && ! empty( $decoded_data ) ) {
+						$repeater_data[] = [
+							'field' => $field,
+							'data' => $decoded_data
+						];
+					}
+				}
+			}
+		}
+
+		if ( ! $has_repeater_fields || empty( $repeater_data ) ) {
+			return;
+		}
+
+		// Display each repeater field's data
+		foreach ( $repeater_data as $repeater_info ) {
+			$field = $repeater_info['field'];
+			$data = $repeater_info['data'];
+			
+			echo '<div class="gf-repeater-data-display" style="margin: 20px 0; padding: 15px; border: 1px solid #ddd; background: #f9f9f9;">';
+			echo '<h3 style="margin-top: 0;">' . esc_html( $field->label ) . '</h3>';
+			echo '<p><strong>' . count( $data ) . '</strong> ' . ( count( $data ) === 1 ? 'instance' : 'instances' ) . ' submitted</p>';
+			
+			foreach ( $data as $instance_index => $instance_data ) {
+				echo '<div class="gf-repeater-instance" style="margin: 15px 0; padding: 10px; border-left: 3px solid #0073aa; background: white;">';
+				echo '<h4 style="margin: 0 0 10px 0; color: #0073aa;">' . esc_html( $field->label ) . ' ' . esc_html( $instance_index + 1 ) . '</h4>';
+				
+				if ( empty( $instance_data ) ) {
+					echo '<p style="color: #666; font-style: italic;">No data submitted for this group.</p>';
+				} else {
+					echo '<table class="widefat" style="margin: 0;">';
+					echo '<thead><tr><th style="width: 30%;">Field</th><th>Value</th></tr></thead>';
+					echo '<tbody>';
+					
+					foreach ( $instance_data as $field_key => $field_values ) {
+						// Get the actual field object to display proper labels
+						$field_obj = $this->get_field_by_input_name( $form, $field_key );
+						$field_label = $field_obj ? $field_obj->label : $field_key;
+						
+						// Handle array values (like radio buttons, checkboxes)
+						$display_value = is_array( $field_values ) ? implode( ', ', $field_values ) : $field_values;
+						
+						echo '<tr>';
+						echo '<td><strong>' . esc_html( $field_label ) . '</strong></td>';
+						echo '<td>' . esc_html( $display_value ) . '</td>';
+						echo '</tr>';
+					}
+					
+					echo '</tbody>';
+					echo '</table>';
+				}
+				
+				echo '</div>';
+			}
+			
+			echo '</div>';
+		}
+	}
+
+	/**
+	 * Check if a field is within a repeater group
+	 *
+	 * @param object $field
+	 * @param int $form_id
+	 * @return bool
+	 */
+	private function is_field_in_repeater_group( $field, $form_id ): bool {
+		$form = \GFAPI::get_form( $form_id );
+		if ( is_wp_error( $form ) ) {
+			return false;
+		}
+
+		$in_repeater_group = false;
+		foreach ( $form['fields'] as $form_field ) {
+			// Start of repeater group.
+			if ( 'repeater_start' === $form_field->type ) {
+				$in_repeater_group = true;
+				continue;
+			}
+
+			// End of repeater group.
+			if ( 'repeater_end' === $form_field->type ) {
+				$in_repeater_group = false;
+				continue;
+			}
+
+			// Check if current field is within repeater group.
+			if ( $in_repeater_group && $form_field->id === $field->id ) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * Get field object by input name
+	 *
+	 * @param array $form
+	 * @param string $input_name
+	 * @return object|null
+	 */
+	private function get_field_by_input_name( $form, $input_name ): ?object {
+		foreach ( $form['fields'] as $field ) {
+			// Check if this field's input name matches.
+			if ( strpos( $input_name, 'input_' . $field->id ) === 0 ) {
+				return $field;
+			}
+		}
+		return null;
 	}
 }
