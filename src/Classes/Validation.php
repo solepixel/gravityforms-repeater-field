@@ -65,6 +65,11 @@ class Validation {
 
 			foreach ( $instances as $idx => $instance_values ) {
 				foreach ( $between_required as $req_field_id => $req_field ) {
+					// Check if this field should be visible based on conditional logic
+					if ( ! $this->is_field_visible_in_instance( $req_field, $instance_values, $form ) ) {
+						continue; // Skip validation for hidden fields
+					}
+
 					$base_name = 'input_' . $req_field_id;
 					$values    = isset( $instance_values[ $base_name ] ) ? $instance_values[ $base_name ] : [];
 					$has_val   = false;
@@ -129,6 +134,90 @@ class Validation {
 		}
 
 		return $result;
+	}
+
+	/**
+	 * Check if a field should be visible based on conditional logic in a repeater instance.
+	 *
+	 * @param \GF_Field $field The field to check
+	 * @param array     $instance_values The values for this instance
+	 * @param array     $form The form object
+	 * @return bool True if field should be visible, false if hidden
+	 */
+	private function is_field_visible_in_instance( $field, $instance_values, $form ) {
+		// If field has no conditional logic, it's always visible
+		if ( empty( $field->conditionalLogic ) || ! is_array( $field->conditionalLogic ) ) {
+			return true;
+		}
+
+		$logic = $field->conditionalLogic;
+		if ( empty( $logic['rules'] ) || ! is_array( $logic['rules'] ) ) {
+			return true;
+		}
+
+		$rules = $logic['rules'];
+		$logic_type = isset( $logic['logicType'] ) ? $logic['logicType'] : 'all';
+		$action_type = isset( $logic['actionType'] ) ? $logic['actionType'] : 'show';
+
+		// Evaluate each rule
+		$rule_results = [];
+		foreach ( $rules as $rule ) {
+			if ( empty( $rule['fieldId'] ) || ! isset( $rule['operator'] ) || ! isset( $rule['value'] ) ) {
+				continue;
+			}
+
+			$trigger_field_id = (int) $rule['fieldId'];
+			$trigger_field_name = 'input_' . $trigger_field_id;
+			$trigger_value = isset( $instance_values[ $trigger_field_name ] ) ? $instance_values[ $trigger_field_name ] : [];
+
+			// Handle array values (radio/checkbox)
+			$actual_value = '';
+			if ( is_array( $trigger_value ) && ! empty( $trigger_value ) ) {
+				$actual_value = $trigger_value[0]; // Get first value for radio buttons
+			} elseif ( ! is_array( $trigger_value ) ) {
+				$actual_value = $trigger_value;
+			}
+
+			$rule_value = (string) $rule['value'];
+			$operator = $rule['operator'];
+
+			$rule_result = false;
+			switch ( $operator ) {
+				case 'is':
+					$rule_result = ( $actual_value === $rule_value );
+					break;
+				case 'isnot':
+					$rule_result = ( $actual_value !== $rule_value );
+					break;
+				case 'contains':
+					$rule_result = ( strpos( $actual_value, $rule_value ) !== false );
+					break;
+				case 'not_contains':
+					$rule_result = ( strpos( $actual_value, $rule_value ) === false );
+					break;
+				case 'starts_with':
+					$rule_result = ( strpos( $actual_value, $rule_value ) === 0 );
+					break;
+				case 'ends_with':
+					$rule_result = ( substr( $actual_value, -strlen( $rule_value ) ) === $rule_value );
+					break;
+			}
+
+			$rule_results[] = $rule_result;
+		}
+
+		// Apply logic type (all/some)
+		$matched = false;
+		if ( $logic_type === 'all' ) {
+			$matched = ! empty( $rule_results ) && ! in_array( false, $rule_results, true );
+		} else {
+			$matched = in_array( true, $rule_results, true );
+		}
+
+		// Apply action type (show/hide)
+		$should_show = ( $action_type === 'show' ) ? $matched : ! $matched;
+
+		return $should_show;
 	}
 }
 
