@@ -26,18 +26,18 @@ class AdminDisplay {
 	 * @return void
 	 */
 	private function init(): void {
-		// Only apply admin filters in admin area
+		// Only apply admin filters in admin area.
 		if ( ! is_admin() ) {
 			return;
 		}
 
-		// Modify entry display for repeater fields in entries table
+		// Modify entry display for repeater fields in entries table.
 		add_filter( 'gform_entries_field_value', [ $this, 'modify_entries_field_value' ], 10, 4 );
 
-		// Modify field content in entry detail page
+		// Modify field content in entry detail page.
 		add_filter( 'gform_field_content', [ $this, 'modify_field_content' ], 10, 5 );
 
-		// Note: Repeater data is now displayed directly in the field content via modify_field_content
+		// Repeater details will be rendered within the repeater_start field content.
 	}
 
 	/**
@@ -103,54 +103,43 @@ class AdminDisplay {
 			return $content;
 		}
 
-		// Handle repeater_start field - show count and display grouped data.
+		// Render grouped repeater instances within the repeater_start field block.
 		if ( 'repeater_start' === $field->type ) {
-			$count = 0;
-			$decoded_data = [];
+			$decoded = [];
 			if ( ! empty( $value ) ) {
-				$decoded_data = json_decode( $value, true );
-				if ( is_array( $decoded_data ) && ! empty( $decoded_data ) ) {
-					$count = count( $decoded_data );
+				$maybe = json_decode( $value, true );
+				if ( is_array( $maybe ) ) {
+					$decoded = $maybe;
 				}
 			}
 
-			$content = '<div class="gf-repeater-field-display">';
-			$content .= '<label class="gfield_label">' . esc_html( $field->label ) . '</label>';
-			$content .= '<div class="gfield_value">' . $count . ' ' . ( $count === 1 ? 'submission' : 'submissions' ) . '</div>';
-
-			// Display grouped repeater data
-			if ( ! empty( $decoded_data ) ) {
-				$content .= '<div class="gf-repeater-data-display" style="margin: 10px 0; padding: 15px; border: 1px solid #ddd; background: #f9f9f9; border-left: 4px solid #0073aa;">';
-
-				foreach ( $decoded_data as $instance_index => $instance_data ) {
-					$content .= '<div class="gf-repeater-instance" style="margin: 10px 0; padding: 10px; background: white; border: 1px solid #e1e1e1;">';
-					$content .= '<h4 style="margin: 0 0 10px 0; color: #0073aa; font-size: 14px;">' . esc_html( $field->label ) . ' ' . esc_html( $instance_index + 1 ) . '</h4>';
-
+			// Build rows that will be nested inside the field value cell.
+			$nested_rows = '';
+			if ( ! empty( $decoded ) ) {
+				$form = \GFAPI::get_form( $form_id );
+				foreach ( $decoded as $i => $instance_data ) {
+					$nested_rows .= '<tr><td colspan="2" class="entry-view-field-name" style="font-weight:bold;color:#0073aa;background:#f9f9f9;border-left:4px solid #0073aa;padding:10px;">' . esc_html( $field->label ) . ' ' . esc_html( (string) ( $i + 1 ) ) . '</td></tr>';
 					if ( empty( $instance_data ) ) {
-						$content .= '<p style="color: #666; font-style: italic; margin: 0;">No data submitted for this group.</p>';
-					} else {
-						foreach ( $instance_data as $field_key => $field_values ) {
-							// Get the actual field object to display proper labels
-							$field_obj = $this->get_field_by_input_name( \GFAPI::get_form( $form_id ), $field_key );
-							$field_label = $field_obj ? $field_obj->label : $field_key;
-
-							// Handle array values (like radio buttons, checkboxes)
-							$display_value = is_array( $field_values ) ? implode( ', ', $field_values ) : $field_values;
-
-							$content .= '<div style="margin: 5px 0; padding: 5px 0; border-bottom: 1px solid #f0f0f0;">';
-							$content .= '<strong style="display: inline-block; width: 150px; color: #333;">' . esc_html( $field_label ) . ':</strong> ';
-							$content .= '<span style="color: #666;">' . esc_html( $display_value ) . '</span>';
-							$content .= '</div>';
-						}
+						$nested_rows .= '<tr><td colspan="2" class="entry-view-field-value" style="color:#666;font-style:italic;padding:10px;">' . esc_html__( 'No data submitted for this group.', 'gravityforms-repeater-field' ) . '</td></tr>';
+						continue;
 					}
-
-					$content .= '</div>';
+					foreach ( $instance_data as $key => $val ) {
+						if ( strpos( $key, '_other' ) !== false ) {
+							continue;
+						}
+						$field_obj   = $this->get_field_by_input_name( $form, $key );
+						$label       = $field_obj ? ( $field_obj->adminLabel ?: $field_obj->label ) : $key;
+						$display_val = $this->format_field_value_for_display( $field_obj, $val, $instance_data );
+						$nested_rows .= '<tr><td colspan="2" class="entry-view-field-name" style="padding-left:20px;font-weight:bold;">' . esc_html( $label ) . '</td></tr>';
+						$nested_rows .= '<tr><td colspan="2" class="entry-view-field-value" style="padding-left:20px;color:#666;">' . esc_html( $display_val ) . '</td></tr>';
+					}
 				}
-
-				$content .= '</div>';
 			}
 
-			$content .= '</div>';
+			// Return two rows in the main table: label row and a value row containing a nested table.
+			$label_row = '<tr><td colspan="2" class="entry-view-field-name">' . esc_html( $field->label ) . '</td></tr>';
+			$value_row = '<tr><td colspan="2" class="entry-view-field-value"><table cellspacing="0" class="entry-details-table"><tbody>' . $nested_rows . '</tbody></table></td></tr>';
+			return $label_row . $value_row;
 		}
 
 		// Hide repeater_end field from entry detail.
@@ -166,81 +155,85 @@ class AdminDisplay {
 		return $content;
 	}
 
+
 	/**
-	 * Display repeater data in entry details
+	 * Display repeater data in entry details (legacy method)
 	 *
 	 * @param int $form_id
 	 * @param int $lead_id
 	 * @return void
 	 */
-	public function display_repeater_data( $form_id, $lead_id ): void {
-		$form = \GFAPI::get_form( $form_id );
-		$entry = \GFAPI::get_entry( $lead_id );
+    public function display_repeater_data( $form_id, $lead_id ): void {
+        $form  = \GFAPI::get_form( $form_id );
+        $entry = \GFAPI::get_entry( $lead_id );
+        if ( is_wp_error( $entry ) ) {
+            return;
+        }
 
-		if ( is_wp_error( $entry ) ) {
-			return;
-		}
+        $rows_html = '';
+        foreach ( $form['fields'] as $field ) {
+            if ( 'repeater_start' !== $field->type ) {
+                continue;
+            }
 
-		$has_repeater_fields = false;
-		$repeater_data = [];
+            $field_value = rgar( $entry, $field->id );
+            if ( empty( $field_value ) ) {
+                continue;
+            }
 
-		// Find all repeater_start fields and their data.
-		foreach ( $form['fields'] as $field ) {
-			if ( 'repeater_start' === $field->type ) {
-				$has_repeater_fields = true;
-				$field_value = rgar( $entry, $field->id );
+            $decoded_data = json_decode( $field_value, true );
+            if ( ! is_array( $decoded_data ) || empty( $decoded_data ) ) {
+                continue;
+            }
 
-				if ( ! empty( $field_value ) ) {
-					$decoded_data = json_decode( $field_value, true );
-					if ( is_array( $decoded_data ) && ! empty( $decoded_data ) ) {
-						$repeater_data[] = [
-							'field' => $field,
-							'data' => $decoded_data
-						];
-					}
-				}
-			}
-		}
+            foreach ( $decoded_data as $instance_index => $instance_data ) {
+                $rows_html .= '<tr>'
+                    . '<td colspan="2" class="entry-view-field-name" style="font-weight:bold;color:#0073aa;background:#f9f9f9;border-left:4px solid #0073aa;padding:10px;">'
+                    . esc_html( $field->label ) . ' ' . esc_html( (string) ( $instance_index + 1 ) )
+                    . '</td></tr>';
 
-		if ( ! $has_repeater_fields || empty( $repeater_data ) ) {
-			return;
-		}
+                if ( empty( $instance_data ) ) {
+                    $rows_html .= '<tr><td colspan="2" class="entry-view-field-value" style="color:#666;font-style:italic;padding:10px;">'
+                        . esc_html__( 'No data submitted for this group.', 'gravityforms-repeater-field' ) . '</td></tr>';
+                    continue;
+                }
 
-		// Display each repeater field's data
-		foreach ( $repeater_data as $repeater_info ) {
-			$field = $repeater_info['field'];
-			$data = $repeater_info['data'];
+                foreach ( $instance_data as $field_key => $field_values ) {
+                    if ( strpos( $field_key, '_other' ) !== false ) {
+                        continue;
+                    }
+                    $field_obj   = $this->get_field_by_input_name( $form, $field_key );
+                    $field_label = $field_obj ? ( $field_obj->adminLabel ?: $field_obj->label ) : $field_key;
+                    $display     = $this->format_field_value_for_display( $field_obj, $field_values, $instance_data );
 
-			echo '<div class="gf-repeater-data-display" style="margin: 10px 0; padding: 15px; border: 1px solid #ddd; background: #f9f9f9; border-left: 4px solid #0073aa;">';
+                    $rows_html .= '<tr><td colspan="2" class="entry-view-field-name" style="padding-left:20px;font-weight:bold;">'
+                        . esc_html( $field_label ) . '</td></tr>';
+                    $rows_html .= '<tr><td colspan="2" class="entry-view-field-value" style="padding-left:20px;color:#666;">'
+                        . esc_html( $display ) . '</td></tr>';
+                }
+            }
+        }
 
-			foreach ( $data as $instance_index => $instance_data ) {
-				echo '<div class="gf-repeater-instance" style="margin: 10px 0; padding: 10px; background: white; border: 1px solid #e1e1e1;">';
-				echo '<h4 style="margin: 0 0 10px 0; color: #0073aa; font-size: 14px;">' . esc_html( $field->label ) . ' ' . esc_html( $instance_index + 1 ) . '</h4>';
+        if ( $rows_html === '' ) {
+            return;
+        }
 
-				if ( empty( $instance_data ) ) {
-					echo '<p style="color: #666; font-style: italic; margin: 0;">No data submitted for this group.</p>';
-				} else {
-					foreach ( $instance_data as $field_key => $field_values ) {
-						// Get the actual field object to display proper labels
-						$field_obj = $this->get_field_by_input_name( $form, $field_key );
-						$field_label = $field_obj ? $field_obj->label : $field_key;
+        // Inject rows into the existing table tbody via JS (keeps us inside the table without string filter issues).
+        $json = wp_json_encode( $rows_html );
+        echo '<script>(function(){var tb=document.querySelector(".entry-details-table tbody");if(!tb)return;try{tb.insertAdjacentHTML("beforeend", ' . $json . ');}catch(e){}})();</script>';
+    }
 
-						// Handle array values (like radio buttons, checkboxes)
-						$display_value = is_array( $field_values ) ? implode( ', ', $field_values ) : $field_values;
-
-						echo '<div style="margin: 5px 0; padding: 5px 0; border-bottom: 1px solid #f0f0f0;">';
-						echo '<strong style="display: inline-block; width: 150px; color: #333;">' . esc_html( $field_label ) . ':</strong> ';
-						echo '<span style="color: #666;">' . esc_html( $display_value ) . '</span>';
-						echo '</div>';
-					}
-				}
-
-				echo '</div>';
-			}
-
-			echo '</div>';
-		}
-	}
+    /**
+     * Inject repeater rows into the entry detail table markup (server-side string replacement).
+     *
+     * @param string $content
+     * @param array  $form
+     * @param array  $entry
+     * @param bool   $allow_display_empty_fields
+     * @param bool   $include_html
+     * @return string
+     */
+    // Removed server-side string filter; using after-content action with JS insertion.
 
 	/**
 	 * Check if we're on an entry detail page
@@ -296,12 +289,56 @@ class AdminDisplay {
 	 * @return object|null
 	 */
 	private function get_field_by_input_name( $form, $input_name ): ?object {
-		foreach ( $form['fields'] as $field ) {
-			// Check if this field's input name matches.
-			if ( strpos( $input_name, 'input_' . $field->id ) === 0 ) {
-				return $field;
+		// Extract numeric field ID from patterns like input_12, input_12.3, input_12_other
+		if ( preg_match( '/^input_(\d+)/', (string) $input_name, $m ) ) {
+			$field_id = (int) $m[1];
+			foreach ( $form['fields'] as $field ) {
+				if ( (int) $field->id === $field_id ) {
+					return $field;
+				}
 			}
 		}
 		return null;
+	}
+
+	/**
+	 * Format field value for display, handling special cases like "Other" radio buttons
+	 *
+	 * @param object $field_obj The field object
+	 * @param mixed  $field_values The field values
+	 * @param array  $instance_data The full instance data
+	 * @return string Formatted display value
+	 */
+	private function format_field_value_for_display( $field_obj, $field_values, $instance_data = [] ) {
+		if ( ! $field_obj || empty( $field_values ) ) {
+			return '';
+		}
+
+		// Handle array values (like radio buttons, checkboxes).
+		$values = is_array( $field_values ) ? $field_values : [ $field_values ];
+
+		// Special handling for radio/checkbox with "Other" option.
+		if ( $field_obj->type === 'radio' || $field_obj->type === 'checkbox' ) {
+			$formatted_values = [];
+
+			foreach ( $values as $value ) {
+				if ( $value === 'gf_other_choice' ) {
+					$other_field_key = 'input_' . $field_obj->id . '_other';
+					$other_value = isset( $instance_data[ $other_field_key ] ) ? $instance_data[ $other_field_key ] : '';
+					// other value can be string or [string]
+					if ( is_array( $other_value ) ) {
+						$other_value = isset( $other_value[0] ) ? $other_value[0] : '';
+					}
+					$formatted_values[] = ! empty( $other_value ) ? 'Other (' . $other_value . ')' : 'Other';
+				} else {
+					$formatted_values[] = $value;
+				}
+			}
+
+			return implode( ', ', $formatted_values );
+		}
+
+		// Default handling for other field types
+		return implode( ', ', $values );
 	}
 }
