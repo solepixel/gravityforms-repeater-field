@@ -57,6 +57,34 @@ class Validation {
 				continue;
 			}
 
+			// Enforce min/max instance constraints defined on the Repeater Start field.
+			// Prefer counting instances from submitted POST field names, which reflects
+			// actual group instances even when JSON omits empty groups.
+			$from_post      = $this->count_instances_from_post( $form, $start_id );
+			$instance_count = max( count( $instances ), $from_post );
+			$min_required   = isset( $field->repeaterMin ) ? (int) $field->repeaterMin : 0;
+			$max_allowed    = isset( $field->repeaterMax ) ? (int) $field->repeaterMax : 0;
+
+			if ( $min_required > 0 && $instance_count < $min_required ) {
+				$failed = true;
+				$field->failed_validation  = true;
+				$field->validation_message = sprintf(
+					/* translators: %d: minimum number of groups */
+					_n( 'Please add at least %d group.', 'Please add at least %d groups.', $min_required, 'gravityforms-repeater-field' ),
+					$min_required
+				);
+			}
+
+			if ( $max_allowed > 0 && $instance_count > $max_allowed ) {
+				$failed = true;
+				$field->failed_validation  = true;
+				$field->validation_message = sprintf(
+					/* translators: %d: maximum number of groups */
+					_n( 'Please add no more than %d group.', 'Please add no more than %d groups.', $max_allowed, 'gravityforms-repeater-field' ),
+					$max_allowed
+				);
+			}
+
 			// Build a map of original fields between Start and End so we know which are required
 			$between_required = $this->get_required_fields_between( $form, $start_id );
 			if ( empty( $between_required ) ) {
@@ -101,6 +129,66 @@ class Validation {
 
 		$validation_result['form'] = $form;
 		return $validation_result;
+	}
+
+	/**
+	 * Count repeater instances from posted field names instead of JSON payload.
+	 *
+	 * We look for input names matching input_{fieldId} and input_{fieldId}__iN
+	 * for any field between the Start and the matching End and count distinct indices.
+	 *
+	 * @param array $form     Form array.
+	 * @param int   $start_id Repeater Start field ID.
+	 * @return int Number of instances detected.
+	 */
+	private function count_instances_from_post( $form, $start_id ): int {
+		$field_ids = $this->get_field_ids_between( $form, $start_id );
+		if ( empty( $field_ids ) ) {
+			return 0;
+		}
+
+		$indices = [];
+		foreach ( $_POST as $key => $value ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
+			if ( ! is_string( $key ) ) {
+				continue;
+			}
+			if ( ! preg_match( '/^input_(\d+)(?:__i(\d+))?$/', $key, $m ) ) {
+				continue;
+			}
+			$fid = (int) $m[1];
+			if ( ! in_array( $fid, $field_ids, true ) ) {
+				continue;
+			}
+			$idx = isset( $m[2] ) && $m[2] !== '' ? (int) $m[2] : 0;
+			$indices[ $idx ] = true;
+		}
+
+		return count( $indices );
+	}
+
+	/**
+	 * Get all field IDs located between a Repeater Start and its matching End.
+	 *
+	 * @param array $form     Form array.
+	 * @param int   $start_id Start field ID.
+	 * @return int[] Array of field IDs between start and end (exclusive).
+	 */
+	private function get_field_ids_between( $form, $start_id ): array {
+		$ids      = [];
+		$collect  = false;
+		foreach ( $form['fields'] as $f ) {
+			if ( (int) $f->id === (int) $start_id ) {
+				$collect = true;
+				continue;
+			}
+			if ( $collect && isset( $f->type ) && 'repeater_end' === $f->type ) {
+				break;
+			}
+			if ( $collect ) {
+				$ids[] = (int) $f->id;
+			}
+		}
+		return $ids;
 	}
 
 	/**

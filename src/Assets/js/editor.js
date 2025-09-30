@@ -51,6 +51,18 @@
 
 	$(function(){
 		updateEndEditorLabels();
+	// Load saved min/max values into the settings inputs when a field is opened.
+	$(document).on('gform_load_field_settings', function(event, field){
+        if (!field || field.type !== 'repeater_start') {
+            return;
+        }
+        var minVal = (typeof field.repeaterMin !== 'undefined' && field.repeaterMin !== null) ? field.repeaterMin : '';
+        var maxVal = (typeof field.repeaterMax !== 'undefined' && field.repeaterMax !== null) ? field.repeaterMax : '';
+        var $min = $('#repeater_min');
+        var $max = $('#repeater_max');
+        if ($min.length) { $min.val(minVal); }
+        if ($max.length) { $max.val(maxVal); }
+    });
 	});
 
 })(jQuery);

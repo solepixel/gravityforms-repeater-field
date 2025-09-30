@@ -58,14 +58,44 @@ class RepeaterStartField extends GF_Field {
      * @return array
      */
     public function get_form_editor_field_settings(): array {
-        return [
+		return [
             'label_setting',
             'label_placement_setting',
             'description_setting',
             'css_class_setting',
             'visibility_setting',
+			'repeater_limit_setting',
         ];
     }
+
+	/**
+	 * Output custom editor settings (min/max instances) for the Repeater Start field.
+	 *
+	 * @param int $position Settings position index.
+	 * @param int $form_id  Current form ID.
+	 * @return void
+	 */
+	public static function render_editor_settings( $position, $form_id ): void { // phpcs:ignore
+		// Render once at a stable position used by GF (50 aligns after visibility_setting in most versions).
+		if ( 50 !== (int) $position ) {
+			return;
+		}
+		?>
+		<li class="repeater_limit_setting field_setting">
+			<label for="repeater_min" class="section_label">
+				<?php esc_html_e( 'Minimum groups', 'gravityforms-repeater-field' ); ?>
+			</label>
+			<input type="number" id="repeater_min" min="0" step="1" oninput="SetFieldProperty('repeaterMin', this.value);" />
+		</li>
+		<li class="repeater_limit_setting field_setting">
+			<label for="repeater_max" class="section_label">
+				<?php esc_html_e( 'Maximum groups', 'gravityforms-repeater-field' ); ?>
+			</label>
+			<input type="number" id="repeater_max" min="0" step="1" oninput="SetFieldProperty('repeaterMax', this.value);" />
+			<p class="description"><?php esc_html_e( 'Leave blank for unlimited.', 'gravityforms-repeater-field' ); ?></p>
+		</li>
+		<?php
+	}
 
     /**
      * Render the input (frontend + editor preview-safe).
@@ -91,6 +121,9 @@ class RepeaterStartField extends GF_Field {
 		}
 
         $label = $this->label ?: esc_html__( 'Repeatable Group', 'gravityforms-repeater-field' );
+
+		$min = isset( $this->repeaterMin ) ? (int) $this->repeaterMin : 0;
+		$max = isset( $this->repeaterMax ) ? (int) $this->repeaterMax : 0;
 
 		$controls = sprintf(
 			'<div class="gf-repeater-controls" data-form-id="%d" data-field-id="%d">
@@ -124,7 +157,9 @@ class RepeaterStartField extends GF_Field {
 
 		$val = is_string( $value ) ? $value : '';
 		return sprintf(
-			'<div class="gf-repeater-header">%s%s</div><input type="hidden" class="gf-repeater-data-input" name="input_%d" id="input_%d_%d" value="%s">',
+			'<div class="gf-repeater-header" data-min="%d" data-max="%d">%s%s</div><input type="hidden" class="gf-repeater-data-input" name="input_%d" id="input_%d_%d" value="%s">',
+			$min,
+			$max,
 			$title,
 			$controls,
 			$field_id,

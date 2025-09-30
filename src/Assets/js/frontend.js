@@ -169,6 +169,11 @@
             });
             this.sanitizeInstanceUI($templateInstance);
 
+            // Read min/max from header (set by server) and store repeater instance
+            const $header = $startGField.find('.gf-repeater-header').first();
+            const minGroups = parseInt(($header.data('min') || 0), 10) || 0;
+            const maxGroups = parseInt(($header.data('max') || 0), 10) || 0;
+
             // Store repeater instance
             this.updateFieldsetIds($firstInstance, 0);
             this.instances.set(repeaterId, {
@@ -179,7 +184,9 @@
                 $controls: $controls,
                 $fieldset: $fieldset,
                 instances: [$firstInstance],
-                $template: $templateInstance
+                $template: $templateInstance,
+                minGroups: minGroups,
+                maxGroups: maxGroups
             });
 
             // Set up initial state
@@ -408,6 +415,12 @@
             const instance = this.instances.get(repeaterId);
             if (!instance) return;
 
+            // Do not add beyond max limit
+            if (instance.maxGroups > 0 && instance.totalInstances >= instance.maxGroups) {
+                this.updateControls(repeaterId);
+                return null;
+            }
+
             // Create new fieldset instance
             const $newFieldset = this.createFieldsetInstance(instance);
             instance.instances.push($newFieldset);
@@ -445,7 +458,15 @@
          */
         removeInstance(repeaterId) {
             const instance = this.instances.get(repeaterId);
-            if (!instance || instance.totalInstances <= 1) return;
+            if (!instance) return;
+
+            // Enforce minimum groups
+            if (instance.minGroups > 0 && instance.totalInstances <= instance.minGroups) {
+                this.updateControls(repeaterId);
+                return;
+            }
+
+            if (instance.totalInstances <= 1) return;
 
             // Remove current instance
             const $current = instance.instances[instance.currentIndex];
@@ -641,12 +662,11 @@
             const $nextBtn = $controls.find('.gf-repeater-next');
             const $count = $controls.find('.gf-repeater-count');
 
-            // Update remove button visibility
-            if (instance.totalInstances > 1) {
-                $removeBtn.show();
-            } else {
-                $removeBtn.hide();
-            }
+            // Update remove button visibility (respect minimum)
+            const canRemove = (instance.minGroups > 0)
+                ? (instance.totalInstances > instance.minGroups)
+                : (instance.totalInstances > 1);
+            $removeBtn.toggle(canRemove);
 
             // Update navigation buttons
             $prevBtn.prop('disabled', instance.currentIndex === 0);
@@ -656,6 +676,13 @@
             if ($count.length) {
                 const current = instance.currentIndex + 1;
                 $count.text(`${current}/${instance.totalInstances}`);
+            }
+
+            // Disable add when max reached
+            if (instance.maxGroups > 0 && instance.totalInstances >= instance.maxGroups) {
+                $addBtn.prop('disabled', true).attr('aria-disabled', 'true');
+            } else {
+                $addBtn.prop('disabled', false).removeAttr('aria-disabled');
             }
         }
 

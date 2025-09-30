@@ -127,7 +127,7 @@ class Assets {
 					echo '<script type="text/javascript">'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 					echo 'window.fieldSettings = window.fieldSettings || {};'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 					// Comma-separated selectors of settings panels for each field type.
-					echo "fieldSettings['repeater_start'] = '.label_setting, .label_placement_setting, .description_setting, .css_class_setting, .visibility_setting';"; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+					echo "fieldSettings['repeater_start'] = '.label_setting, .label_placement_setting, .description_setting, .css_class_setting, .visibility_setting, .repeater_limit_setting';"; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 					echo "fieldSettings['repeater_end'] = '';"; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 					echo '</script>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 				}

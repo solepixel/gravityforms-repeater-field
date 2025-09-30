@@ -97,6 +97,14 @@ class Core {
 		RepeaterStartField::register_field();
 		RepeaterEndField::register_field();
 
+		// Editor settings (min/max) for Repeater Start.
+		add_action(
+			'gform_field_advanced_settings',
+			[ RepeaterStartField::class, 'render_editor_settings' ],
+			10,
+			2
+		);
+
 		// Editor-time structural validation: ensure Start has End.
 		add_filter(
 			'gform_pre_form_settings_save',
