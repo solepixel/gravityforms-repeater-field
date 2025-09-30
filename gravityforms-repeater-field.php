@@ -14,6 +14,7 @@
  * Tested up to: 6.4
  * Requires PHP: 7.4
  * Network: false
+ * GitHub Plugin URI: https://github.com/solepixel/gravityforms-repeater-field
  *
  * @package GravityFormsRepeaterField
  */
@@ -51,3 +52,13 @@ function gf_repeater_field_init() {
 }
 
 add_action( 'gform_loaded', 'gf_repeater_field_init', 5 );
+
+// Initialize GitHub-based updater (admin only).
+if ( is_admin() ) {
+	add_action( 'admin_init', function () {
+		// phpcs:ignore WordPress.Security.NonceVerification
+		$token = (string) apply_filters( 'gfrf_github_token', '' );
+		$assetPrefix = 'gravityforms-repeater-field';
+		new \GravityFormsRepeaterField\GitHubUpdater( __FILE__, 'solepixel', 'gravityforms-repeater-field', $assetPrefix, $token );
+	} );
+}
