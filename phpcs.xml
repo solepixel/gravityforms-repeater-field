@@ -3,7 +3,20 @@
 	<description>WordPress Coding Standards for Gravity Forms Repeater Field Plugin</description>
 
 	<!-- Include the WordPress Coding Standards -->
-	<rule ref="WordPress"/>
+	<rule ref="WordPress">
+		<!-- Allow short array syntax and disable Yoda conditions to match project style. -->
+		<exclude name="WordPress.PHP.DisallowShortArraySyntax"/>
+		<exclude name="WordPress.PHP.YodaConditions"/>
+		<!-- Ignore filename casing rules due to autoloading and upstream naming. -->
+		<exclude name="WordPress.Files.FileName"/>
+		<!-- Indentation varies in upstream files; do not enforce tabs-only indentation. -->
+		<exclude name="Generic.WhiteSpace.DisallowSpaceIndent"/>
+		<!-- Third-party object properties (e.g., GF field objects) are camelCase; allow them. -->
+		<exclude name="WordPress.NamingConventions.ValidVariableName"/>
+	</rule>
+
+	<!-- Allow short array syntax [] (backup for non-WPCS sniffs). -->
+	<rule ref="Generic.Arrays.DisallowShortArraySyntax"><severity>0</severity></rule>
 
 	<!-- Exclude some rules that are not applicable -->
 	<rule ref="WordPress.NamingConventions.PrefixAllGlobals">

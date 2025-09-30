@@ -12,47 +12,11 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Get plugin version
+ * Get repeater field data from entry.
  *
- * @return string
- */
-function gf_repeater_field_get_version(): string {
-	return GF_REPEATER_FIELD_VERSION;
-}
-
-/**
- * Get plugin directory path
- *
- * @return string
- */
-function gf_repeater_field_get_plugin_dir(): string {
-	return GF_REPEATER_FIELD_PLUGIN_DIR;
-}
-
-/**
- * Get plugin URL
- *
- * @return string
- */
-function gf_repeater_field_get_plugin_url(): string {
-	return GF_REPEATER_FIELD_PLUGIN_URL;
-}
-
-/**
- * Check if Gravity Forms is active
- *
- * @return bool
- */
-function gf_repeater_field_is_gravity_forms_active(): bool {
-	return class_exists( 'GFForms' );
-}
-
-/**
- * Get repeater field data from entry
- *
- * @param int $entry_id
- * @param int $field_id
- * @return array
+ * @param int $entry_id Entry ID.
+ * @param int $field_id Field ID for the repeater_start field.
+ * @return array Parsed repeater data for this field; empty array if none.
  */
 function gf_repeater_field_get_entry_data( int $entry_id, int $field_id ): array {
 	$entry = \GFAPI::get_entry( $entry_id );
@@ -61,7 +25,7 @@ function gf_repeater_field_get_entry_data( int $entry_id, int $field_id ): array
 	}
 
 	$repeater_data = [];
-	$field_value = rgar( $entry, $field_id );
+	$field_value   = rgar( $entry, $field_id );
 
 	if ( ! empty( $field_value ) ) {
 		$repeater_data = maybe_unserialize( $field_value );
@@ -71,11 +35,13 @@ function gf_repeater_field_get_entry_data( int $entry_id, int $field_id ): array
 }
 
 /**
- * Format repeater field value for display
+ * Format repeater field value for display.
  *
- * @param array $repeater_data
- * @param array $form
- * @return string
+ * Note: This returns raw HTML without escaping as escaping should occur at the point of output.
+ *
+ * @param array $repeater_data Repeater data structure.
+ * @param array $form          Gravity Forms form array.
+ * @return string HTML markup representing the repeater data.
  */
 function gf_repeater_field_format_display_value( array $repeater_data, array $form ): string {
 	if ( empty( $repeater_data ) ) {
@@ -86,14 +52,14 @@ function gf_repeater_field_format_display_value( array $repeater_data, array $fo
 
 	foreach ( $repeater_data as $index => $instance ) {
 		$output .= '<div class="gf-repeater-instance">';
-		$output .= '<h4>' . sprintf( __( 'Instance %d', 'gravityforms-repeater-field' ), $index + 1 ) . '</h4>';
+		$output .= sprintf( '<h4>%s</h4>', sprintf( __( 'Instance %d', 'gravityforms-repeater-field' ), $index + 1 ) );
 
 		foreach ( $instance as $field_id => $value ) {
 			$field = \GFAPI::get_field( $form, $field_id );
 			if ( $field ) {
 				$output .= '<div class="gf-repeater-field">';
-				$output .= '<strong>' . esc_html( $field->label ) . ':</strong> ';
-				$output .= '<span>' . esc_html( $value ) . '</span>';
+				$output .= sprintf( '<strong>%s:</strong> ', $field->label );
+				$output .= sprintf( '<span>%s</span>', is_array( $value ) ? implode( ', ', $value ) : $value );
 				$output .= '</div>';
 			}
 		}
@@ -107,15 +73,15 @@ function gf_repeater_field_format_display_value( array $repeater_data, array $fo
 }
 
 /**
- * Get section fields for a form
+ * Get section fields for a form.
  *
- * @param array $form
- * @param int $section_field_id
- * @return array
+ * @param array $form              Gravity Forms form array.
+ * @param int   $section_field_id  The starting section field ID.
+ * @return array Ordered list of field objects inside the section.
  */
 function gf_repeater_field_get_section_fields( array $form, int $section_field_id ): array {
 	$section_fields = [];
-	$in_section = false;
+	$in_section     = false;
 
 	foreach ( $form['fields'] as $field ) {
 		if ( $field->id === $section_field_id ) {
@@ -136,33 +102,33 @@ function gf_repeater_field_get_section_fields( array $form, int $section_field_i
 }
 
 /**
- * Duplicate field for repeater
+ * Duplicate field for repeater.
  *
- * @param array $field
- * @param int $instance_index
- * @return array
+ * @param array $field          Field array to duplicate.
+ * @param int   $instance_index Instance index to append.
+ * @return array Duplicated field array with adjusted identifiers.
  */
 function gf_repeater_field_duplicate_field( array $field, int $instance_index ): array {
 	$duplicated_field = $field;
 
-	// Update field ID to include instance index
+	// Update field ID to include instance index.
 	$duplicated_field['id'] = $field['id'] . '_' . $instance_index;
 
-	// Update field name to include array notation
+	// Update field name to include array notation.
 	$duplicated_field['name'] = $field['name'] . '[]';
 
-	// Update field input ID
+	// Update field input ID.
 	$duplicated_field['inputId'] = $field['inputId'] . '_' . $instance_index;
 
 	return $duplicated_field;
 }
 
 /**
- * Apply conditional logic to duplicated field
+ * Apply conditional logic to duplicated field.
  *
- * @param array $field
- * @param int $instance_index
- * @return array
+ * @param array $field          Field array.
+ * @param int   $instance_index Instance index.
+ * @return array Field array with adjusted conditional logic field IDs.
  */
 function gf_repeater_field_apply_conditional_logic( array $field, int $instance_index ): array {
 	if ( empty( $field['conditionalLogic'] ) ) {
@@ -171,7 +137,7 @@ function gf_repeater_field_apply_conditional_logic( array $field, int $instance_
 
 	$conditional_logic = $field['conditionalLogic'];
 
-	// Update conditional logic field IDs to match duplicated fields
+	// Update conditional logic field IDs to match duplicated fields.
 	foreach ( $conditional_logic['rules'] as &$rule ) {
 		$rule['fieldId'] = $rule['fieldId'] . '_' . $instance_index;
 	}

@@ -26,9 +26,20 @@ class Assets {
 	 * @return void
 	 */
 	private function init(): void {
-		add_action( 'wp_enqueue_scripts', [ $this, 'enqueue_frontend_assets' ] );
-		add_action( 'admin_enqueue_scripts', [ $this, 'enqueue_admin_assets' ] );
-		add_action( 'gform_enqueue_scripts', [ $this, 'enqueue_form_assets' ], 10, 2 );
+		add_action(
+			'wp_enqueue_scripts',
+			[ $this, 'enqueue_frontend_assets' ]
+		);
+		add_action(
+			'admin_enqueue_scripts',
+			[ $this, 'enqueue_admin_assets' ]
+		);
+		add_action(
+			'gform_enqueue_scripts',
+			[ $this, 'enqueue_form_assets' ],
+			10,
+			2
+		);
 	}
 
 	/**
@@ -49,7 +60,7 @@ class Assets {
 			GF_REPEATER_FIELD_PLUGIN_URL . 'src/Assets/js/frontend.js',
 			[ 'jquery' ],
 			GF_REPEATER_FIELD_VERSION,
-			true
+			[ 'in_footer' => true ]
 		);
 
 		wp_localize_script(
@@ -94,7 +105,7 @@ class Assets {
 				GF_REPEATER_FIELD_PLUGIN_URL . 'src/Assets/js/admin.js',
 				[ 'jquery' ],
 				GF_REPEATER_FIELD_VERSION,
-				true
+				[ 'in_footer' => true ]
 			);
 		}
 
@@ -105,19 +116,22 @@ class Assets {
 				GF_REPEATER_FIELD_PLUGIN_URL . 'src/Assets/js/editor.js',
 				[ 'jquery' ],
 				GF_REPEATER_FIELD_VERSION,
-				true
+				[ 'in_footer' => true ]
 			);
 
 			// Provide fieldSettings mappings required by Gravity Forms editor JS to avoid undefined errors.
-			add_action( 'admin_print_footer_scripts', function () {
-				// Output without JS-escaped newlines to avoid stray backslashes in source.
-				echo '<script type="text/javascript">';
-				echo 'window.fieldSettings = window.fieldSettings || {};';
-				// Comma-separated selectors of settings panels for each field type.
-				echo "fieldSettings['repeater_start'] = '.label_setting, .label_placement_setting, .description_setting, .css_class_setting, .visibility_setting';";
-				echo "fieldSettings['repeater_end'] = '';";
-				echo '</script>';
-			} );
+			add_action(
+				'admin_print_footer_scripts',
+				function () {
+					// Output without JS-escaped newlines to avoid stray backslashes in source.
+					echo '<script type="text/javascript">'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+					echo 'window.fieldSettings = window.fieldSettings || {};'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+					// Comma-separated selectors of settings panels for each field type.
+					echo "fieldSettings['repeater_start'] = '.label_setting, .label_placement_setting, .description_setting, .css_class_setting, .visibility_setting';"; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+					echo "fieldSettings['repeater_end'] = '';"; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+					echo '</script>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+				}
+			);
 		}
 	}
 
@@ -154,7 +168,7 @@ class Assets {
 			GF_REPEATER_FIELD_PLUGIN_URL . 'src/Assets/js/form.js',
 			[ 'jquery' ],
 			GF_REPEATER_FIELD_VERSION,
-			true
+			[ 'in_footer' => true ]
 		);
 	}
 }

@@ -22,7 +22,7 @@
          * Initialize the repeater field functionality
          */
         init() {
-            console.log('GF Repeater Field: Initializing...');
+
             this.bindEvents();
             this.initializeRepeaters();
         }
@@ -53,14 +53,14 @@
          * Initialize existing repeaters on page load
          */
         initializeRepeaters() {
-            console.log('GF Repeater Field: Initializing repeaters...');
+
             $('.gf-repeater-controls').each((index, element) => {
                 const $controls = $(element);
                 const formId = $controls.data('form-id');
                 const fieldId = $controls.data('field-id');
 
                 if (formId && fieldId) {
-                    console.log(`GF Repeater Field: Setting up repeater ${formId}-${fieldId}`);
+
                     this.initializeRepeater(formId, fieldId, $controls);
                     // Attach GF listeners once globally
                     this.attachGFListeners();
@@ -72,18 +72,18 @@
          * Initialize a specific repeater
          */
         initializeRepeater(formId, fieldId, $controls) {
-            console.log(`GF Repeater Field: Initializing repeater ${formId}-${fieldId}`);
+
             const repeaterId = `gf-repeater-${formId}-${fieldId}`;
 
             // Check if already initialized
             if (this.instances.has(repeaterId)) {
-                console.log(`GF Repeater Field: Repeater ${repeaterId} already initialized, skipping...`);
+
                 return;
             }
 
             const $startGField = $(`#field_${formId}_${fieldId}`);
             if ($startGField.length === 0) {
-                console.log(`GF Repeater Field: Start field not found for ${formId}-${fieldId}`);
+
                 return;
             }
 
@@ -189,11 +189,11 @@
 			const $hidden = $(`#input_${formId}_${fieldId}`);
 			if ($hidden.length) {
 				const raw = $hidden.val();
-				console.log(`GF Repeater Field: Hidden input value:`, raw);
+
 				if (raw && raw.trim() !== '') {
 					try {
 						const data = JSON.parse(raw);
-						console.log(`GF Repeater Field: Parsed data:`, data);
+
 						if (Array.isArray(data) && data.length > 1) {
 							// Clear the first instance if it's empty and we have data to restore
 							const instObj = this.instances.get(repeaterId);
@@ -215,7 +215,7 @@
                 if ($instanceToPopulate && $instanceToPopulate.length) {
                     this.populateInstance($instanceToPopulate, data[i], formId);
                 } else {
-                    console.error(`Failed to create instance ${i} for repeater ${repeaterId}`);
+
                 }
             }
 
@@ -230,7 +230,7 @@
 							this.updateControls(repeaterId);
 						}
 					} catch(e) {
-						console.error("Error parsing repeater data from hidden input:", e);
+
 					}
 				}
 			}
@@ -283,22 +283,20 @@
          * @returns {void}
          */
         copyValidationErrorsToInstances(instances, data) {
-            console.log('GF Repeater Field: Copying validation errors to instances...');
-            console.log('Instances:', instances.length);
-            console.log('Data:', data);
+
 
             if (instances.length <= 1) return;
 
             // For each instance, check if it has validation errors based on its data
             instances.forEach(($instance, instanceIndex) => {
-                console.log(`Processing instance ${instanceIndex + 1}...`);
+
                 const instanceData = data[instanceIndex];
                 if (!instanceData) {
-                    console.log(`No data for instance ${instanceIndex + 1}`);
+
                     return;
                 }
 
-                console.log(`Instance ${instanceIndex + 1} data:`, instanceData);
+
 
                 // Check ALL required fields in this instance, not just the ones with data
                 $instance.find('.gfield.gfield_contains_required').each(function() {
@@ -309,17 +307,17 @@
                     const fieldKey = $input.data('gf-repeater-original-name');
                     if (!fieldKey) return;
 
-                    console.log(`Checking field ${fieldKey} in instance ${instanceIndex + 1}`);
+
 
                     // Check if this field has data in the instanceData
                     const fieldValues = instanceData[fieldKey];
                     const hasValue = fieldValues && Array.isArray(fieldValues) && fieldValues.some(val => val && val !== '');
 
-                    console.log(`Field ${fieldKey}: hasValue=${hasValue}, isRequired=true`);
+
 
                     if (!hasValue) {
                         // This field should have a validation error
-                        console.log(`Adding validation error to field ${fieldKey} in instance ${instanceIndex + 1}`);
+
                         $field.addClass('gfield_error');
                         $field.attr('aria-invalid', 'true');
                         $field.find(':input').attr('aria-invalid', 'true');
@@ -333,7 +331,7 @@
                         $message.text(`This field is required for group ${instanceIndex + 1}.`);
                     } else {
                         // This field should not have validation errors
-                        console.log(`Removing validation error from field ${fieldKey} in instance ${instanceIndex + 1}`);
+
                         $field.removeClass('gfield_error');
                         $field.attr('aria-invalid', 'false');
                         $field.find(':input').attr('aria-invalid', 'false');

@@ -61,13 +61,13 @@ class Core {
 	 * @return void
 	 */
 	public function init(): void {
-		// Load plugin dependencies
+		// Load plugin dependencies.
 		$this->load_dependencies();
 
-		// Initialize modules
+		// Initialize modules.
 		$this->init_modules();
 
-		// Load the text domain for translations
+		// Load the text domain for translations.
 		$this->load_text_domain();
 
 		$this->initialized = true;
@@ -81,7 +81,7 @@ class Core {
 	 * @return void
 	 */
 	private function load_dependencies(): void {
-		// Load helper functions
+		// Load helper functions.
 		require_once GF_REPEATER_FIELD_PLUGIN_DIR . 'src/helpers.php';
 	}
 
@@ -98,13 +98,15 @@ class Core {
 		RepeaterEndField::register_field();
 
 		// Editor-time structural validation: ensure Start has End.
-		add_filter( 'gform_pre_form_settings_save', function( $form ) {
+		add_filter(
+			'gform_pre_form_settings_save',
+			function ( $form ) {
 			if ( empty( $form['fields'] ) ) {
 				return $form;
 			}
 			$stack = 0;
 			foreach ( $form['fields'] as $field ) {
-				$type = isset( $field->type ) ? $field->type : '';
+				$type = $field->type ?? '';
 				if ( 'repeater_start' === $type ) {
 					$stack++;
 				}
@@ -112,22 +114,29 @@ class Core {
 					$stack--;
 				}
 			}
-			if ( $stack !== 0 ) {
+			if ( 0 !== $stack ) {
 				// Surface an admin notice after save attempt.
-				add_action( 'admin_notices', function() {
-					printf( '<div class="notice notice-error"><p>%s</p></div>', esc_html__( 'Gravity Forms Repeater: Each Repeater Start must have a matching Repeater End.', 'gravityforms-repeater-field' ) );
-				} );
+				add_action(
+					'admin_notices',
+					function () {
+						printf(
+							'<div class="notice notice-error"><p>%s</p></div>',
+							esc_html__( 'Gravity Forms Repeater: Each Repeater Start must have a matching Repeater End.', 'gravityforms-repeater-field' )
+						);
+					}
+				);
 			}
 			return $form;
-		} );
+		}
+		);
 
-		// Initialize assets
+		// Initialize assets.
 		new Assets();
 
-		// Initialize admin display
+		// Initialize admin display.
 		new AdminDisplay();
 
-		// Initialize server-side validation for repeater instances
+		// Initialize server-side validation for repeater instances.
 		new Validation();
 	}
 

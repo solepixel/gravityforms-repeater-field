@@ -82,31 +82,31 @@ class RepeaterStartField extends GF_Field {
         $field_id = (int) $this->id;
 
         // In the form editor, output a simple, clickable preview block.
-        if ( $this->is_form_editor() ) {
-            // Avoid duplicating the label in the editor; only show helper text.
-            return sprintf(
-                '<div class="ginput_container"><div class="description">%s</div><hr /></div>',
-                esc_html__( 'Fields placed after this will be repeatable until Repeater End.', 'gravityforms-repeater-field' )
-            );
-        }
+		if ( $this->is_form_editor() ) {
+			// Avoid duplicating the label in the editor; only show helper text.
+			return sprintf(
+				'<div class="ginput_container"><div class="description">%s</div><hr /></div>',
+				esc_html__( 'Fields placed after this will be repeatable until Repeater End.', 'gravityforms-repeater-field' )
+			);
+		}
 
         $label = $this->label ?: esc_html__( 'Repeatable Group', 'gravityforms-repeater-field' );
 
-        $controls = sprintf(
-            '<div class="gf-repeater-controls" data-form-id="%d" data-field-id="%d">
-                <button type="button" class="gf-repeater-remove" title="%s" style="display:none;">-</button>
-                <button type="button" class="gf-repeater-prev" title="%s" disabled>←</button>
-                <span class="gf-repeater-count" aria-live="polite">1/1</span>
-                <button type="button" class="gf-repeater-next" title="%s" disabled>→</button>
-                <button type="button" class="gf-repeater-add" title="%s">+</button>
-            </div>',
-            $form_id,
-            $field_id,
-            esc_attr__( 'Remove Group', 'gravityforms-repeater-field' ),
-            esc_attr__( 'Previous Group', 'gravityforms-repeater-field' ),
-            esc_attr__( 'Next Group', 'gravityforms-repeater-field' ),
-            esc_attr__( 'Add Group', 'gravityforms-repeater-field' )
-        );
+		$controls = sprintf(
+			'<div class="gf-repeater-controls" data-form-id="%d" data-field-id="%d">
+				<button type="button" class="gf-repeater-remove" title="%s" style="display:none;">-</button>
+				<button type="button" class="gf-repeater-prev" title="%s" disabled>←</button>
+				<span class="gf-repeater-count" aria-live="polite">1/1</span>
+				<button type="button" class="gf-repeater-next" title="%s" disabled>→</button>
+				<button type="button" class="gf-repeater-add" title="%s">+</button>
+			</div>',
+			$form_id,
+			$field_id,
+			esc_attr__( 'Remove Group', 'gravityforms-repeater-field' ),
+			esc_attr__( 'Previous Group', 'gravityforms-repeater-field' ),
+			esc_attr__( 'Next Group', 'gravityforms-repeater-field' ),
+			esc_attr__( 'Add Group', 'gravityforms-repeater-field' )
+		);
 
         $title = sprintf( '<h3 class="gf-group-title gsection_title">%s</h3>', esc_html( $label ) );
 

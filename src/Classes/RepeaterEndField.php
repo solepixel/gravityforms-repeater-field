@@ -79,7 +79,10 @@ class RepeaterEndField extends GF_Field {
 	 */
 	public function get_field_content( $value, $force_frontend_label, $form ) { // phpcs:ignore
 		if ( $this->is_form_editor() ) {
-			return '<div class="ginput_container"><strong>' . esc_html__( 'End Repeater', 'gravityforms-repeater-field' ) . '</strong><hr /></div>';
+			return sprintf(
+				'<div class="ginput_container"><strong>%s</strong><hr /></div>',
+				esc_html__( 'End Repeater', 'gravityforms-repeater-field' )
+			);
 		}
 
 		// Frontend: return empty string so no extra spacing is introduced.

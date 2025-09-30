@@ -32,10 +32,20 @@ class AdminDisplay {
 		}
 
 		// Modify entry display for repeater fields in entries table.
-		add_filter( 'gform_entries_field_value', [ $this, 'modify_entries_field_value' ], 10, 4 );
+		add_filter(
+			'gform_entries_field_value',
+			[ $this, 'modify_entries_field_value' ],
+			10,
+			4
+		);
 
 		// Modify field content in entry detail page.
-		add_filter( 'gform_field_content', [ $this, 'modify_field_content' ], 10, 5 );
+		add_filter(
+			'gform_field_content',
+			[ $this, 'modify_field_content' ],
+			10,
+			5
+		);
 
 		// Repeater details will be rendered within the repeater_start field content.
 	}
@@ -62,13 +72,13 @@ class AdminDisplay {
 
 		// Handle repeater_start field - show submission count.
 		if ( 'repeater_start' === $field->type ) {
-			// Get the actual value from the entry data
+			// Get the actual value from the entry data.
 			$field_value = rgar( $entry, $field_id );
 			if ( ! empty( $field_value ) ) {
 				$decoded_data = json_decode( $field_value, true );
 				if ( is_array( $decoded_data ) && ! empty( $decoded_data ) ) {
 					$count = count( $decoded_data );
-					return $count . ' ' . ( $count === 1 ? 'submission' : 'submissions' );
+					return sprintf( '%d %s', $count, ( 1 === $count ? 'submission' : 'submissions' ) );
 				}
 			}
 			return '0 submissions';
@@ -118,9 +128,16 @@ class AdminDisplay {
 			if ( ! empty( $decoded ) ) {
 				$form = \GFAPI::get_form( $form_id );
 				foreach ( $decoded as $i => $instance_data ) {
-					$nested_rows .= '<tr><td colspan="2" class="entry-view-field-name" style="font-weight:bold;color:#0073aa;background:#f9f9f9;border-left:4px solid #0073aa;padding:10px;">' . esc_html( $field->label ) . ' ' . esc_html( (string) ( $i + 1 ) ) . '</td></tr>';
+					$nested_rows .= sprintf(
+						'<tr><td colspan="2" class="entry-view-field-name" style="font-weight:bold;color:#0073aa;background:#f9f9f9;border-left:4px solid #0073aa;padding:10px;">%s %d</td></tr>',
+						$field->label,
+						( $i + 1 )
+					);
 					if ( empty( $instance_data ) ) {
-						$nested_rows .= '<tr><td colspan="2" class="entry-view-field-value" style="color:#666;font-style:italic;padding:10px;">' . esc_html__( 'No data submitted for this group.', 'gravityforms-repeater-field' ) . '</td></tr>';
+						$nested_rows .= sprintf(
+							'<tr><td colspan="2" class="entry-view-field-value" style="color:#666;font-style:italic;padding:10px;">%s</td></tr>',
+							__( 'No data submitted for this group.', 'gravityforms-repeater-field' )
+						);
 						continue;
 					}
 					foreach ( $instance_data as $key => $val ) {
@@ -130,15 +147,21 @@ class AdminDisplay {
 						$field_obj   = $this->get_field_by_input_name( $form, $key );
 						$label       = $field_obj ? ( $field_obj->adminLabel ?: $field_obj->label ) : $key;
 						$display_val = $this->format_field_value_for_display( $field_obj, $val, $instance_data );
-						$nested_rows .= '<tr><td colspan="2" class="entry-view-field-name" style="padding-left:20px;font-weight:bold;">' . esc_html( $label ) . '</td></tr>';
-						$nested_rows .= '<tr><td colspan="2" class="entry-view-field-value" style="padding-left:20px;color:#666;">' . esc_html( $display_val ) . '</td></tr>';
+						$nested_rows .= sprintf(
+							'<tr><td colspan="2" class="entry-view-field-name" style="padding-left:20px;font-weight:bold;">%s</td></tr>',
+							$label
+						);
+						$nested_rows .= sprintf(
+							'<tr><td colspan="2" class="entry-view-field-value" style="padding-left:20px;color:#666;">%s</td></tr>',
+							$display_val
+						);
 					}
 				}
 			}
 
 			// Return two rows in the main table: label row and a value row containing a nested table.
-			$label_row = '<tr><td colspan="2" class="entry-view-field-name">' . esc_html( $field->label ) . '</td></tr>';
-			$value_row = '<tr><td colspan="2" class="entry-view-field-value"><table cellspacing="0" class="entry-details-table"><tbody>' . $nested_rows . '</tbody></table></td></tr>';
+			$label_row = sprintf( '<tr><td colspan="2" class="entry-view-field-name">%s</td></tr>', $field->label );
+			$value_row = sprintf( '<tr><td colspan="2" class="entry-view-field-value"><table cellspacing="0" class="entry-details-table"><tbody>%s</tbody></table></td></tr>', $nested_rows );
 			return $label_row . $value_row;
 		}
 
@@ -154,74 +177,6 @@ class AdminDisplay {
 
 		return $content;
 	}
-
-
-	/**
-	 * Display repeater data in entry details (legacy method)
-	 *
-	 * @param int $form_id
-	 * @param int $lead_id
-	 * @return void
-	 */
-    public function display_repeater_data( $form_id, $lead_id ): void {
-        $form  = \GFAPI::get_form( $form_id );
-        $entry = \GFAPI::get_entry( $lead_id );
-        if ( is_wp_error( $entry ) ) {
-            return;
-        }
-
-        $rows_html = '';
-        foreach ( $form['fields'] as $field ) {
-            if ( 'repeater_start' !== $field->type ) {
-                continue;
-            }
-
-            $field_value = rgar( $entry, $field->id );
-            if ( empty( $field_value ) ) {
-                continue;
-            }
-
-            $decoded_data = json_decode( $field_value, true );
-            if ( ! is_array( $decoded_data ) || empty( $decoded_data ) ) {
-                continue;
-            }
-
-            foreach ( $decoded_data as $instance_index => $instance_data ) {
-                $rows_html .= '<tr>'
-                    . '<td colspan="2" class="entry-view-field-name" style="font-weight:bold;color:#0073aa;background:#f9f9f9;border-left:4px solid #0073aa;padding:10px;">'
-                    . esc_html( $field->label ) . ' ' . esc_html( (string) ( $instance_index + 1 ) )
-                    . '</td></tr>';
-
-                if ( empty( $instance_data ) ) {
-                    $rows_html .= '<tr><td colspan="2" class="entry-view-field-value" style="color:#666;font-style:italic;padding:10px;">'
-                        . esc_html__( 'No data submitted for this group.', 'gravityforms-repeater-field' ) . '</td></tr>';
-                    continue;
-                }
-
-                foreach ( $instance_data as $field_key => $field_values ) {
-                    if ( strpos( $field_key, '_other' ) !== false ) {
-                        continue;
-                    }
-                    $field_obj   = $this->get_field_by_input_name( $form, $field_key );
-                    $field_label = $field_obj ? ( $field_obj->adminLabel ?: $field_obj->label ) : $field_key;
-                    $display     = $this->format_field_value_for_display( $field_obj, $field_values, $instance_data );
-
-                    $rows_html .= '<tr><td colspan="2" class="entry-view-field-name" style="padding-left:20px;font-weight:bold;">'
-                        . esc_html( $field_label ) . '</td></tr>';
-                    $rows_html .= '<tr><td colspan="2" class="entry-view-field-value" style="padding-left:20px;color:#666;">'
-                        . esc_html( $display ) . '</td></tr>';
-                }
-            }
-        }
-
-        if ( $rows_html === '' ) {
-            return;
-        }
-
-        // Inject rows into the existing table tbody via JS (keeps us inside the table without string filter issues).
-        $json = wp_json_encode( $rows_html );
-        echo '<script>(function(){var tb=document.querySelector(".entry-details-table tbody");if(!tb)return;try{tb.insertAdjacentHTML("beforeend", ' . $json . ');}catch(e){}})();</script>';
-    }
 
     /**
      * Inject repeater rows into the entry detail table markup (server-side string replacement).
@@ -242,7 +197,7 @@ class AdminDisplay {
 	 */
 	private function is_entry_detail_page(): bool {
 		global $pagenow;
-		return ( 'admin.php' === $pagenow && isset( $_GET['page'] ) && 'gf_entries' === $_GET['page'] && isset( $_GET['view'] ) && 'entry' === $_GET['view'] );
+		return 'admin.php' === $pagenow && isset( $_GET['page'] ) && 'gf_entries' === $_GET['page'] && isset( $_GET['view'] ) && 'entry' === $_GET['view'];
 	}
 
 	/**
@@ -327,9 +282,9 @@ class AdminDisplay {
 					$other_value = isset( $instance_data[ $other_field_key ] ) ? $instance_data[ $other_field_key ] : '';
 					// other value can be string or [string]
 					if ( is_array( $other_value ) ) {
-						$other_value = isset( $other_value[0] ) ? $other_value[0] : '';
+						$other_value = $other_value[0] ?? '';
 					}
-					$formatted_values[] = ! empty( $other_value ) ? 'Other (' . $other_value . ')' : 'Other';
+					$formatted_values[] = ! empty( $other_value ) ? __( 'Other', 'gravityforms-repeater-field' ) . ' (' . esc_html( $other_value ) . ')' : __( 'Other', 'gravityforms-repeater-field' );
 				} else {
 					$formatted_values[] = $value;
 				}
