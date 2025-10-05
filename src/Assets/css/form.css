@@ -93,23 +93,6 @@
 	transform: translateX(0);
 }
 
-/* Mobile responsive adjustments */
-@media (max-width: 640px) {
-	.gform_wrapper .gf-repeater-controls {
-		flex-direction: column;
-		align-items: stretch;
-	}
-
-	.gform_wrapper .gf-repeater-controls button {
-		width: 100%;
-		margin-bottom: 8px;
-	}
-
-	.gform_wrapper .gf-repeater-controls button:last-child {
-		margin-bottom: 0;
-	}
-}
-
 /* Print styles */
 @media print {
 	.gf-repeater-controls {
