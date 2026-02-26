@@ -1,0 +1,127 @@
+name: Release Gravity Forms Repeater Field Plugin
+
+on:
+  push:
+    tags:
+      - 'v*'  # Triggers on tags like v1.0.0, v1.0.1, etc.
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          tools: composer
+          coverage: none
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Release version: $VERSION"
+
+      - name: Install PHP dependencies
+        run: |
+          if [ -f composer.json ]; then
+            composer install --no-dev --prefer-dist --no-interaction --no-progress
+          fi
+
+      - name: Update plugin version
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          PLUGIN_FILE="gravityforms-repeater-field.php"
+
+          # Update version in plugin header
+          sed -i "s/Version: [0-9]\+\.[0-9]\+\.[0-9]\+/Version: $VERSION/" "$PLUGIN_FILE"
+
+          # Update version constant
+          sed -i "s/define( 'GF_REPEATER_FIELD_VERSION', '[^']*'/define( 'GF_REPEATER_FIELD_VERSION', '$VERSION'/" "$PLUGIN_FILE"
+
+          echo "Updated version to $VERSION"
+
+      - name: Create plugin zip
+        run: |
+          PLUGIN_NAME="gravityforms-repeater-field"
+          TEMP_DIR=$(mktemp -d)
+          PLUGIN_DIR="$TEMP_DIR/$PLUGIN_NAME"
+          mkdir -p "$PLUGIN_DIR"
+
+          rsync -av \
+            --exclude='.git' \
+            --exclude='.github' \
+            --exclude='node_modules' \
+            --exclude='.DS_Store' \
+            --exclude='**/.DS_Store' \
+            --exclude='**/*.map' \
+            --exclude='.gitignore' \
+            --exclude='phpcs.xml' \
+            --exclude='*.zip' \
+            --exclude='*.tar.gz' \
+            . "$PLUGIN_DIR/"
+
+          cd "$TEMP_DIR"
+          zip -r "gravityforms-repeater-field-${{ steps.version.outputs.version }}.zip" "$PLUGIN_NAME"
+
+          mv "gravityforms-repeater-field-${{ steps.version.outputs.version }}.zip" "$GITHUB_WORKSPACE/"
+
+          rm -rf "$TEMP_DIR"
+
+          echo "Created plugin zip with correct folder structure"
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          PREVIOUS_TAG=$(git describe --tags --abbrev=0 HEAD~1 2>/dev/null || echo "")
+
+          if [ -n "$PREVIOUS_TAG" ]; then
+            echo "Previous tag: $PREVIOUS_TAG"
+            CHANGELOG=$(git log --pretty=format:"- %s (%h)" ${PREVIOUS_TAG}..HEAD --no-merges)
+          else
+            echo "No previous tag found"
+            CHANGELOG=$(git log --pretty=format:"- %s (%h)" --no-merges)
+          fi
+
+          if [ -z "$CHANGELOG" ]; then
+            CHANGELOG="- Initial release"
+          fi
+
+          echo "changelog<<EOF" >> $GITHUB_OUTPUT
+          echo "$CHANGELOG" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Gravity Forms Repeater Field ${{ steps.version.outputs.version }}
+          body: |
+            ## Changes in this release
+
+            ${{ steps.changelog.outputs.changelog }}
+
+            ## Installation
+
+            1. Download the plugin zip file
+            2. Go to WordPress Admin > Plugins > Add New > Upload Plugin
+            3. Upload the zip file and activate
+
+            ## Plugin Information
+
+            - **Version**: ${{ steps.version.outputs.version }}
+            - **Requires WordPress**: 5.0+
+            - **Tested up to**: 6.9
+            - **Requires PHP**: 7.4+
+          files: gravityforms-repeater-field-${{ steps.version.outputs.version }}.zip
+          draft: false
+          prerelease: false

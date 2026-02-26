@@ -90,6 +90,9 @@ gravityforms-repeater-field/
 
 ## Changelog
 
+### 1.0.1
+- Added Merge Tag Formatting
+
 ### 1.0.0
 - Initial release
 - Section field with repeater functionality

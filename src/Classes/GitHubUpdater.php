@@ -86,6 +86,9 @@ class GitHubUpdater {
 		add_filter( 'pre_set_site_transient_update_plugins', array( $this, 'check_for_updates' ) );
 		add_filter( 'plugins_api', array( $this, 'plugin_api_call' ), 10, 3 );
 		add_filter( 'upgrader_pre_download', array( $this, 'upgrader_pre_download' ), 10, 2 );
+		add_filter( 'upgrader_post_install', array( $this, 'upgrader_post_install' ), 10, 3 );
+		// Clear our GitHub cache when WordPress clears the update_plugins transient (e.g. "Check again").
+		add_action( 'delete_site_transient_update_plugins', array( $this, 'clear_release_cache' ) );
 	}
 
 	/**
@@ -180,8 +183,30 @@ class GitHubUpdater {
 	 *
 	 * @return array<string,mixed>|false
 	 */
+	/**
+	 * Cache key used for the GitHub latest release transient.
+	 *
+	 * @return string
+	 */
+	private function get_release_cache_key(): string {
+		return sprintf( 'gfrf_github_latest_release_%s_%s', md5( $this->githubUser ), md5( $this->githubRepo ) );
+	}
+
+	/**
+	 * Clear cached GitHub release when WordPress forces an update check.
+	 * Ensures "Check again" triggers a fresh API request instead of stale cache.
+	 */
+	public function clear_release_cache(): void {
+		delete_transient( $this->get_release_cache_key() );
+	}
+
+	/**
+	 * Get latest release metadata from GitHub.
+	 *
+	 * @return array<string,mixed>|false
+	 */
 	private function get_latest_release() {
-		$cacheKey = sprintf( 'gfrf_github_latest_release_%s_%s', md5( $this->githubUser ), md5( $this->githubRepo ) );
+		$cacheKey = $this->get_release_cache_key();
 		$cached   = get_transient( $cacheKey );
 		if ( false !== $cached ) {
 			return $cached;
@@ -211,6 +236,11 @@ class GitHubUpdater {
 		);
 
 		if ( is_wp_error( $response ) ) {
+			return false;
+		}
+
+		$code = (int) wp_remote_retrieve_response_code( $response );
+		if ( $code !== 200 ) {
 			return false;
 		}
 
@@ -298,6 +328,51 @@ class GitHubUpdater {
 		}
 
 		return $args;
+	}
+
+	/**
+	 * Ensure plugin folder name remains consistent after update.
+	 *
+	 * WordPress may rename the plugin folder if the zip file structure doesn't match.
+	 * This filter ensures the plugin folder name stays as expected.
+	 *
+	 * @since 1.0.1
+	 *
+	 * @param bool|\WP_Error $response   Response.
+	 * @param array          $hook_extra Extra arguments passed to hooked filters.
+	 * @param array          $result     Installation result data.
+	 * @return bool|\WP_Error Response.
+	 */
+	public function upgrader_post_install( $response, $hook_extra, $result ) {
+		if ( ! isset( $hook_extra['plugin'] ) || plugin_basename( $this->pluginFile ) !== $hook_extra['plugin'] ) {
+			return $response;
+		}
+
+		$plugin_slug     = dirname( plugin_basename( $this->pluginFile ) );
+		$expected_folder = $plugin_slug;
+
+		if ( isset( $result['destination'] ) && is_dir( $result['destination'] ) ) {
+			$installed_folder = basename( $result['destination'] );
+
+			if ( $installed_folder !== $expected_folder ) {
+				$old_path = $result['destination'];
+				$new_path = dirname( $old_path ) . '/' . $expected_folder;
+
+				$files = new \WP_Filesystem_Direct( null );
+
+				if ( $old_path !== $new_path && is_dir( $new_path ) ) {
+					$files->rmdir( $old_path, true );
+				} elseif ( $old_path !== $new_path ) {
+					$moved = $files->move( $old_path, $new_path );
+					if ( $moved ) {
+						$result['destination']       = $new_path;
+						$result['local_destination'] = $new_path;
+					}
+				}
+			}
+		}
+
+		return $response;
 	}
 }
 
