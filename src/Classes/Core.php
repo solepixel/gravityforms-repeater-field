@@ -149,6 +149,9 @@ class Core {
 
 		// Format repeater JSON as labels/values in {all_fields} email merge tags.
 		new MergeTagFormatting();
+
+		// Improve email readability and attach files from repeater instances.
+		new NotificationEnhancements();
 	}
 
 	/**

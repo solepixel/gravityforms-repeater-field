@@ -113,7 +113,7 @@ class AdminDisplay {
 			return $content;
 		}
 
-		// Render grouped repeater instances within the repeater_start field block.
+		// Render grouped repeater instances within the repeater_start field block (reuses shared formatter).
 		if ( 'repeater_start' === $field->type ) {
 			$decoded = [];
 			if ( ! empty( $value ) ) {
@@ -123,44 +123,31 @@ class AdminDisplay {
 				}
 			}
 
-			// Build rows that will be nested inside the field value cell.
 			$nested_rows = '';
 			if ( ! empty( $decoded ) ) {
-				$form = \GFAPI::get_form( $form_id );
-				foreach ( $decoded as $i => $instance_data ) {
+				$form     = \GFAPI::get_form( $form_id );
+				$groups   = gf_repeater_field_get_formatted_instance_rows( $decoded, $form, 'entry_detail', (int) $lead_id );
+				foreach ( $groups as $group ) {
 					$nested_rows .= sprintf(
-						'<tr><td colspan="2" class="entry-view-field-name" style="font-weight:bold;color:#0073aa;background:#f9f9f9;border-left:4px solid #0073aa;padding:10px;">%s %d</td></tr>',
-						$field->label,
-						( $i + 1 )
+						'<tr><td colspan="2" class="entry-view-field-name" style="font-weight:bold;color:#0073aa;background:#f9f9f9;border-left:4px solid #0073aa;padding:10px;">%s</td></tr>',
+						esc_html( $group['group_label'] )
 					);
-					if ( empty( $instance_data ) ) {
-						$nested_rows .= sprintf(
-							'<tr><td colspan="2" class="entry-view-field-value" style="color:#666;font-style:italic;padding:10px;">%s</td></tr>',
-							__( 'No data submitted for this group.', 'gravityforms-repeater-field' )
-						);
-						continue;
-					}
-					foreach ( $instance_data as $key => $val ) {
-						if ( strpos( $key, '_other' ) !== false ) {
-							continue;
+					foreach ( $group['rows'] as $row ) {
+						if ( $row['label'] !== '' ) {
+							$nested_rows .= sprintf(
+								'<tr><td colspan="2" class="entry-view-field-name" style="padding-left:20px;font-weight:bold;">%s</td></tr>',
+								esc_html( $row['label'] )
+							);
 						}
-						$field_obj   = $this->get_field_by_input_name( $form, $key );
-						$label       = $field_obj ? ( $field_obj->adminLabel ?: $field_obj->label ) : $key;
-						$display_val = $this->format_field_value_for_display( $field_obj, $val, $instance_data );
-						$nested_rows .= sprintf(
-							'<tr><td colspan="2" class="entry-view-field-name" style="padding-left:20px;font-weight:bold;">%s</td></tr>',
-							$label
-						);
 						$nested_rows .= sprintf(
 							'<tr><td colspan="2" class="entry-view-field-value" style="padding-left:20px;color:#666;">%s</td></tr>',
-							$display_val
+							$row['value']
 						);
 					}
 				}
 			}
 
-			// Return two rows in the main table: label row and a value row containing a nested table.
-			$label_row = sprintf( '<tr><td colspan="2" class="entry-view-field-name">%s</td></tr>', $field->label );
+			$label_row = sprintf( '<tr><td colspan="2" class="entry-view-field-name">%s</td></tr>', esc_html( $field->label ) );
 			$value_row = sprintf( '<tr><td colspan="2" class="entry-view-field-value"><table cellspacing="0" class="entry-details-table"><tbody>%s</tbody></table></td></tr>', $nested_rows );
 			return $label_row . $value_row;
 		}
@@ -256,44 +243,4 @@ class AdminDisplay {
 		return null;
 	}
 
-	/**
-	 * Format field value for display, handling special cases like "Other" radio buttons
-	 *
-	 * @param object $field_obj The field object
-	 * @param mixed  $field_values The field values
-	 * @param array  $instance_data The full instance data
-	 * @return string Formatted display value
-	 */
-	private function format_field_value_for_display( $field_obj, $field_values, $instance_data = [] ) {
-		if ( ! $field_obj || empty( $field_values ) ) {
-			return '';
-		}
-
-		// Handle array values (like radio buttons, checkboxes).
-		$values = is_array( $field_values ) ? $field_values : [ $field_values ];
-
-		// Special handling for radio/checkbox with "Other" option.
-		if ( $field_obj->type === 'radio' || $field_obj->type === 'checkbox' ) {
-			$formatted_values = [];
-
-			foreach ( $values as $value ) {
-				if ( $value === 'gf_other_choice' ) {
-					$other_field_key = 'input_' . $field_obj->id . '_other';
-					$other_value = isset( $instance_data[ $other_field_key ] ) ? $instance_data[ $other_field_key ] : '';
-					// other value can be string or [string]
-					if ( is_array( $other_value ) ) {
-						$other_value = $other_value[0] ?? '';
-					}
-					$formatted_values[] = ! empty( $other_value ) ? __( 'Other', 'gravityforms-repeater-field' ) . ' (' . esc_html( $other_value ) . ')' : __( 'Other', 'gravityforms-repeater-field' );
-				} else {
-					$formatted_values[] = $value;
-				}
-			}
-
-			return implode( ', ', $formatted_values );
-		}
-
-		// Default handling for other field types
-		return implode( ', ', $values );
-	}
 }
