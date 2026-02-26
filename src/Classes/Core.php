@@ -146,6 +146,9 @@ class Core {
 
 		// Initialize server-side validation for repeater instances.
 		new Validation();
+
+		// Format repeater JSON as labels/values in {all_fields} email merge tags.
+		new MergeTagFormatting();
 	}
 
 	/**

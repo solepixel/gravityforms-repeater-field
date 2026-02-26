@@ -73,6 +73,72 @@ function gf_repeater_field_format_display_value( array $repeater_data, array $fo
 }
 
 /**
+ * Format repeater field value for email/merge tags (labels and values, html or text).
+ *
+ * @param array  $repeater_data Decoded repeater data (array of instances, each with input_id => value).
+ * @param array  $form          Gravity Forms form array.
+ * @param string $format        'html' or 'text'.
+ * @return string Formatted output for email.
+ */
+function gf_repeater_field_format_merge_tag_value( array $repeater_data, array $form, string $format = 'html' ): string {
+	if ( empty( $repeater_data ) ) {
+		return '';
+	}
+
+	$output = '';
+	foreach ( $repeater_data as $index => $instance ) {
+		$group_label = sprintf(
+			/* translators: %d: 1-based group index */
+			__( 'Group %d', 'gravityforms-repeater-field' ),
+			$index + 1
+		);
+
+		if ( 'text' === $format ) {
+			$output .= "--------------------------------\n" . $group_label . "\n\n";
+		} else {
+			$output .= sprintf(
+				'<tr><td colspan="2" style="font-size:14px; font-weight:bold; background-color:#EEE; border-bottom:1px solid #DFDFDF; padding:7px 7px">%s</td></tr>',
+				esc_html( $group_label )
+			);
+		}
+
+		foreach ( $instance as $input_key => $value ) {
+			if ( '' === $input_key || strpos( $input_key, 'input_' ) !== 0 ) {
+				continue;
+			}
+			$field_id = (int) str_replace( 'input_', '', $input_key );
+			if ( $field_id <= 0 ) {
+				continue;
+			}
+			$field = \GFAPI::get_field( $form, $field_id );
+			if ( ! $field ) {
+				continue;
+			}
+			$label   = $field->label;
+			$display = is_array( $value ) ? implode( ', ', array_filter( $value ) ) : (string) $value;
+			$display = trim( $display );
+			if ( 'text' === $format ) {
+				$output .= $label . ': ' . $display . "\n\n";
+			} else {
+				$output .= sprintf(
+					'<tr bgcolor="#EAF2FA"><td colspan="2"><font style="font-family: sans-serif; font-size:12px;"><strong>%s</strong></font></td></tr>' .
+					'<tr bgcolor="#FFFFFF"><td width="20">&nbsp;</td><td><font style="font-family: sans-serif; font-size:12px;">%s</font></td></tr>',
+					esc_html( $label ),
+					esc_html( $display ) ?: '&nbsp;'
+				);
+			}
+		}
+	}
+
+	// Repeater output is inserted inside a single <td>; wrap in a nested table for valid HTML.
+	if ( 'html' === $format && $output !== '' ) {
+		$output = '<table width="100%" border="0" cellpadding="2" cellspacing="0" style="margin-top:4px"><tbody>' . $output . '</tbody></table>';
+	}
+
+	return $output;
+}
+
+/**
  * Get section fields for a form.
  *
  * @param array $form              Gravity Forms form array.
