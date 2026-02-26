@@ -93,16 +93,36 @@ function gf_repeater_field_format_field_value_for_display( $field, $value, array
 	$format   = $is_email ? 'html' : 'html';
 	$media    = $is_email ? 'email' : 'screen';
 
-	// File upload: use GF's display so we get proper links (and resolve fakepath when possible).
+	// File upload: only show a link when the URL is valid and the file exists; otherwise plain text.
 	if ( isset( $field->type ) && $field->type === 'fileupload' ) {
 		$value = gf_repeater_field_resolve_file_value( $value, $field, $entry_id, $form );
 		if ( empty( $value ) ) {
 			return '';
 		}
-		// Pass as JSON string if array (multiple files), else single URL string.
-		$value_for_gf = is_array( $value ) ? wp_json_encode( array_values( $value ) ) : (string) $value;
-		$display      = $field->get_value_entry_detail( $value_for_gf, '', false, $format, $media );
-		return $display !== '' ? $display : '';
+		$urls   = is_array( $value ) ? array_values( $value ) : [ (string) $value ];
+		$valid  = [];
+		$plain  = [];
+		foreach ( $urls as $url ) {
+			if ( gf_repeater_field_is_valid_file_link( $url, $field, $entry_id ) ) {
+				$valid[] = $url;
+			} else {
+				$plain[] = is_string( $url ) ? $url : '';
+			}
+		}
+		$parts = [];
+		if ( ! empty( $valid ) ) {
+			$value_for_gf = wp_json_encode( $valid );
+			$link_markup  = $field->get_value_entry_detail( $value_for_gf, '', false, $format, $media );
+			if ( $link_markup !== '' ) {
+				$parts[] = $link_markup;
+			}
+		}
+		foreach ( $plain as $p ) {
+			if ( $p !== '' ) {
+				$parts[] = esc_html( wp_basename( $p ) );
+			}
+		}
+		return implode( ', ', $parts );
 	}
 
 	// Radio/checkbox with "Other" option.
@@ -162,6 +182,37 @@ function gf_repeater_field_resolve_file_value( $value, $field, $entry_id, $form 
 		$resolved[] = $url;
 	}
 	return is_array( $value ) ? $resolved : ( $resolved[0] ?? '' );
+}
+
+/**
+ * Whether a file value is a valid URL and the file exists, so it is safe to show as a link.
+ *
+ * @param string   $url      File URL or path (e.g. fakepath).
+ * @param \GF_Field $field   File upload field.
+ * @param int     $entry_id Entry ID (0 if unknown).
+ * @return bool True if the value is a valid URL and the file exists (or is external and can't be verified).
+ */
+function gf_repeater_field_is_valid_file_link( $url, $field, $entry_id = 0 ) {
+	if ( ! is_string( $url ) || trim( $url ) === '' ) {
+		return false;
+	}
+	// Must be a valid URL (http or https); fakepath and local paths are not linkable.
+	if ( ! preg_match( '#^https?://#i', $url ) ) {
+		return false;
+	}
+	// For Gravity Forms uploads, verify the physical file exists before linking.
+	if ( $entry_id > 0 && isset( $field->formId ) ) {
+		$path = \GFFormsModel::get_physical_file_path( $url, $entry_id );
+		if ( $path !== '' && file_exists( $path ) ) {
+			return true;
+		}
+		// URL looks like GF but file missing, or path could not be resolved.
+		if ( $path !== '' ) {
+			return false;
+		}
+	}
+	// External URL or no entry context: allow link (can't verify existence).
+	return true;
 }
 
 /**

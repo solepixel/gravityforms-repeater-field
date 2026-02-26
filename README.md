@@ -90,6 +90,10 @@ gravityforms-repeater-field/
 
 ## Changelog
 
+### 1.0.2
+- Enhancements to admin rendering and email display.
+- Fix issue with file upload fields.
+
 ### 1.0.1
 - Added Merge Tag Formatting
 
