@@ -42,25 +42,11 @@ class MergeTagFormatting {
 	 * @param string       $options      Merge tag options string.
 	 * @param \GF_Field    $field        The field object.
 	 * @param mixed        $raw_value    Raw field value from entry.
-	 * @param string       $format      'html' or 'text'.
+	 * @param string       $format       'html' or 'text'.
 	 * @return string|false Filtered value.
 	 */
 	public function format_repeater_for_merge_tag( $field_value, $merge_tag, $options, $field, $raw_value, $format ) {
-		if ( ! $field || $field->type !== 'repeater_start' ) {
-			return $field_value;
-		}
-
-		if ( ! in_array( $merge_tag, self::$all_fields_merge_tags, true ) ) {
-			return $field_value;
-		}
-
-		$raw_string = is_string( $raw_value ) ? $raw_value : '';
-		if ( $raw_string === '' ) {
-			return $field_value;
-		}
-
-		$decoded = json_decode( $raw_string, true );
-		if ( ! is_array( $decoded ) || empty( $decoded ) ) {
+		if ( ! $field || ! in_array( $merge_tag, self::$all_fields_merge_tags, true ) ) {
 			return $field_value;
 		}
 
@@ -69,7 +55,28 @@ class MergeTagFormatting {
 			return $field_value;
 		}
 
-		$format = in_array( $format, [ 'html', 'text' ], true ) ? $format : 'html';
-		return gf_repeater_field_format_merge_tag_value( $decoded, $form, $format );
+		// If this is a Repeater Start field, replace JSON with grouped label/value output.
+		if ( $field->type === 'repeater_start' ) {
+			$raw_string = is_string( $raw_value ) ? $raw_value : '';
+			if ( $raw_string === '' ) {
+				return $field_value;
+			}
+
+			$decoded = json_decode( $raw_string, true );
+			if ( ! is_array( $decoded ) || empty( $decoded ) ) {
+				return $field_value;
+			}
+
+			$format = in_array( $format, [ 'html', 'text' ], true ) ? $format : 'html';
+			return gf_repeater_field_format_merge_tag_value( $decoded, $form, $format );
+		}
+
+		// For child fields inside any repeater group, suppress their own {all_fields} rows;
+		// they are already rendered inside the parent Repeater Start's grouped output.
+		if ( gf_repeater_field_is_field_in_repeater_group( $form, $field ) ) {
+			return false;
+		}
+
+		return $field_value;
 	}
 }

@@ -367,30 +367,84 @@ function gf_repeater_field_format_merge_tag_value( array $repeater_data, array $
 /**
  * Get section fields for a form.
  *
+ * Historically used sections; now superseded by repeater-aware helpers.
+ *
  * @param array $form              Gravity Forms form array.
  * @param int   $section_field_id  The starting section field ID.
- * @return array Ordered list of field objects inside the section.
+ * @return array Ordered list of field objects; kept for backward compatibility.
  */
-function gf_repeater_field_get_section_fields( array $form, int $section_field_id ): array {
-	$section_fields = [];
-	$in_section     = false;
+function gf_repeater_field_get_section_fields( array $form, int $section_field_id ): array { // phpcs:ignore
+	return [];
+}
+
+/**
+ * Return all fields that belong to the repeater group starting at the given Repeater Start field.
+ *
+ * The group is defined as all fields between the Repeater Start and its matching Repeater End.
+ *
+ * @param array $form          Gravity Forms form array.
+ * @param int   $start_field_id Repeater Start field ID.
+ * @return array Field objects inside this repeater group.
+ */
+function gf_repeater_field_get_repeater_child_fields( array $form, int $start_field_id ): array {
+	$children   = [];
+	$in_group   = false;
 
 	foreach ( $form['fields'] as $field ) {
-		if ( $field->id === $section_field_id ) {
-			$in_section = true;
+		if ( ! $in_group && isset( $field->id, $field->type ) && (int) $field->id === $start_field_id && $field->type === 'repeater_start' ) {
+			$in_group = true;
 			continue;
 		}
 
-		if ( $in_section && $field->type === 'section' ) {
-			break;
-		}
-
-		if ( $in_section ) {
-			$section_fields[] = $field;
+		if ( $in_group ) {
+			// End of this repeater group.
+			if ( isset( $field->type ) && $field->type === 'repeater_end' ) {
+				break;
+			}
+			$children[] = $field;
 		}
 	}
 
-	return $section_fields;
+	return $children;
+}
+
+/**
+ * Check if a field is contained within any repeater group on the form.
+ *
+ * @param array    $form  Gravity Forms form array.
+ * @param \GF_Field $field Field object to test.
+ * @return bool True if the field is inside a repeater group, false otherwise.
+ */
+function gf_repeater_field_is_field_in_repeater_group( array $form, $field ): bool {
+	if ( ! $field || ! isset( $field->id ) ) {
+		return false;
+	}
+
+	$target_id        = (int) $field->id;
+	$in_repeater_group = false;
+
+	foreach ( $form['fields'] as $form_field ) {
+		$type = $form_field->type ?? '';
+
+		// Start of any repeater group.
+		if ( 'repeater_start' === $type ) {
+			$in_repeater_group = true;
+			continue;
+		}
+
+		// End of any repeater group.
+		if ( 'repeater_end' === $type ) {
+			$in_repeater_group = false;
+			continue;
+		}
+
+		// If we're in a repeater group and this is the target field, it's a child.
+		if ( $in_repeater_group && isset( $form_field->id ) && (int) $form_field->id === $target_id ) {
+			return true;
+		}
+	}
+
+	return false;
 }
 
 /**

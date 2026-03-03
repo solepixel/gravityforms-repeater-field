@@ -192,7 +192,7 @@
             // Set up initial state
             this.updateControls(repeaterId);
 
-			// If hidden input has JSON data (after validation reload), restore instances and values
+			// If hidden input has JSON data (after validation error or reload), restore instances and values
 			const $hidden = $(`#input_${formId}_${fieldId}`);
 			if ($hidden.length) {
 				const raw = $hidden.val();
@@ -201,43 +201,42 @@
 					try {
 						const data = JSON.parse(raw);
 
-						if (Array.isArray(data) && data.length > 1) {
-							// Clear the first instance if it's empty and we have data to restore
+						if (Array.isArray(data) && data.length >= 1) {
 							const instObj = this.instances.get(repeaterId);
-							if (instObj.totalInstances === 1 && Object.keys(data[0]).length === 0) {
+							if (!instObj) return;
+
+							// If we have more than one group in the saved data, remove the default first instance when it's empty so we can rebuild from data
+							if (data.length > 1 && instObj.totalInstances === 1 && Object.keys(data[0] || {}).length === 0) {
 								instObj.instances[0].remove();
 								instObj.instances.splice(0, 1);
 								instObj.totalInstances = 0;
 							}
 
-            // Create instances to match data length
-            for (let i = 0; i < data.length; i++) {
-                let $instanceToPopulate;
-                if (i === 0 && instObj.instances.length > 0) {
-                    $instanceToPopulate = instObj.instances[0];
-                } else {
-                    $instanceToPopulate = this.addInstance(repeaterId, false);
-                }
+							// Create enough instances and populate each from saved data
+							for (let i = 0; i < data.length; i++) {
+								let $instanceToPopulate;
+								if (i === 0 && instObj.instances.length > 0) {
+									$instanceToPopulate = instObj.instances[0];
+								} else {
+									$instanceToPopulate = this.addInstance(repeaterId, false);
+								}
 
-                if ($instanceToPopulate && $instanceToPopulate.length) {
-                    this.populateInstance($instanceToPopulate, data[i], formId);
-                } else {
+								if ($instanceToPopulate && $instanceToPopulate.length) {
+									this.populateInstance($instanceToPopulate, data[i] || {}, formId);
+								}
+							}
 
-                }
-            }
+							// Copy validation errors to the right instances after a short delay
+							setTimeout(() => {
+								this.copyValidationErrorsToInstances(instObj.instances, data);
+							}, 100);
 
-            // Wait a moment for GF to apply validation errors, then copy them
-            setTimeout(() => {
-                this.copyValidationErrorsToInstances(instObj.instances, data);
-            }, 100);
-
-							// Ensure current index is valid and update display
-							instObj.currentIndex = Math.min(instObj.currentIndex, instObj.totalInstances - 1);
+							instObj.currentIndex = Math.min(instObj.currentIndex, Math.max(0, instObj.totalInstances - 1));
 							this.updateDisplay(repeaterId);
 							this.updateControls(repeaterId);
 						}
-					} catch(e) {
-
+					} catch (e) {
+						// Invalid JSON or missing data; leave repeater as-is
 					}
 				}
 			}
@@ -562,6 +561,15 @@
                     const baseName = originalName.endsWith('[]') ? originalName.slice(0, -2) : originalName;
                     const type = ($field.attr('type') || '').toLowerCase();
                     const isOther = /_other$/.test(baseName);
+
+                    // File uploads: ensure all instances use the same base name AND submit as an array
+                    // so PHP/GF can see multiple files for this one File Upload field.
+                    if (type === 'file') {
+                        const multiName = originalName.endsWith('[]') ? originalName : `${originalName}[]`;
+                        $field.attr('name', multiName);
+                        return;
+                    }
+
                     // Radios/checkboxes: keep base for instance 0, unique name for clones
                     if (type === 'radio' || type === 'checkbox') {
                         $field.attr('name', instanceIndex === 0 ? baseName : `${baseName}__i${instanceIndex}`);
@@ -778,8 +786,14 @@
                     $hidden.val(JSON.stringify(instancesData));
                 }
 
-                // After packing JSON, disable only cloned inputs (names with __iN) so GF doesn't process them
-                $fieldset.find('.gf-repeater-instance :input[name*="__i"]').prop('disabled', true);
+                // After packing JSON, disable only cloned non-file inputs (names with __iN) so GF doesn't process them.
+                $fieldset.find('.gf-repeater-instance :input[name*="__i"]').each(function(){
+                    const $inp = jQuery(this);
+                    const type = ($inp.attr('type') || '').toLowerCase();
+                    if (type !== 'file') {
+                        $inp.prop('disabled', true);
+                    }
+                });
             });
         }
 
@@ -936,9 +950,17 @@
 			try {
 				$(document).trigger('gform_post_render', [formId, 1]);
 			} catch(e) {}
-			// Some GF builds expose helpers; call defensively if present
+			// Reset and re-initialize datepickers similar to Gravity Forms' own repeater logic.
 			try {
-				if (typeof window.gformInitDatepicker === 'function') { window.gformInitDatepicker(); }
+				const $container = jQuery(`#gform_wrapper_${formId}`);
+				if ($container.length) {
+					$container.find('.gform-datepicker.initialized').removeClass('initialized');
+					$container.find('.ui-datepicker-trigger').remove();
+					$container.find('.hasDatepicker').removeClass('hasDatepicker');
+				}
+				if (typeof window.gformInitDatepicker === 'function') {
+					window.gformInitDatepicker();
+				}
 			} catch(e) {}
 			// Try to initialize currency formatting for inputs inside repeater instances heuristically
 			try {

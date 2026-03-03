@@ -84,21 +84,14 @@ class NotificationEnhancements {
 		$paths    = [];
 
 		foreach ( $repeater_fields as $repeater_field ) {
-			$raw = rgar( $entry, (string) $repeater_field->id );
-			if ( $raw === '' || $raw === null ) {
-				continue;
-			}
 
-			$decoded = json_decode( $raw, true );
-			if ( ! is_array( $decoded ) ) {
-				continue;
-			}
+			// All fields belonging to this repeater group (between Start and matching End).
+			$group_fields   = gf_repeater_field_get_repeater_child_fields( $form, (int) $repeater_field->id );
+			$file_field_ids = array();
 
-			$section_fields = gf_repeater_field_get_section_fields( $form, (int) $repeater_field->id );
-			$file_field_ids = [];
-			foreach ( $section_fields as $section_field ) {
-				if ( isset( $section_field->type ) && $section_field->type === 'fileupload' ) {
-					$file_field_ids[] = (int) $section_field->id;
+			foreach ( $group_fields as $group_field ) {
+				if ( isset( $group_field->type ) && $group_field->type === 'fileupload' ) {
+					$file_field_ids[] = (int) $group_field->id;
 				}
 			}
 
@@ -106,30 +99,34 @@ class NotificationEnhancements {
 				continue;
 			}
 
-			foreach ( $decoded as $instance ) {
-				if ( ! is_array( $instance ) ) {
+			// For each fileupload field in this repeater group, use the entry's field value
+			// (Gravity Forms' own storage) to discover all uploaded files and attach them.
+			foreach ( $file_field_ids as $field_id ) {
+				$raw = rgar( $entry, (string) $field_id );
+				if ( empty( $raw ) ) {
 					continue;
 				}
-				foreach ( $file_field_ids as $field_id ) {
-					$input_key = 'input_' . $field_id;
-					$value    = isset( $instance[ $input_key ] ) ? $instance[ $input_key ] : null;
-					if ( $value === null || $value === '' ) {
+
+				$files = json_decode( $raw, true );
+				if ( ! is_array( $files ) ) {
+					$files = array_filter( array( $raw ) );
+				}
+
+				foreach ( $files as $file ) {
+					// Multi-file fields store an array with tmp_url/uploaded_name; single-file may just be a URL string.
+					if ( is_array( $file ) ) {
+						$file_url = rgar( $file, 'tmp_url' );
+					} else {
+						$file_url = (string) $file;
+					}
+
+					if ( ! is_string( $file_url ) || trim( $file_url ) === '' ) {
 						continue;
 					}
-					$urls = is_array( $value ) ? $value : [ $value ];
-					foreach ( $urls as $file_url ) {
-						if ( ! is_string( $file_url ) || trim( $file_url ) === '' ) {
-							continue;
-						}
-						$path_info = \GF_Field_FileUpload::get_file_upload_path_info( $file_url, $entry_id );
-						$root_url  = rgar( $path_info, 'url' );
-						if ( $root_url && substr( $file_url, 0, strlen( $root_url ) ) !== $root_url ) {
-							continue;
-						}
-						$file_path = \GFFormsModel::get_physical_file_path( $file_url, $entry_id );
-						if ( $file_path !== '' && file_exists( $file_path ) ) {
-							$paths[] = $file_path;
-						}
+
+					$file_path = \GFFormsModel::get_physical_file_path( $file_url, $entry_id );
+					if ( $file_path !== '' && file_exists( $file_path ) ) {
+						$paths[] = $file_path;
 					}
 				}
 			}
